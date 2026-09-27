@@ -41,6 +41,7 @@ public final class SettingsScreen extends Screen {
     public enum Tab {
         GHOSTS("Ghosts", "How missing blocks look"),
         BUILDING("Building", "Placing blocks and moving schematics"),
+        AUTOBUILD("AutoBuild", "The server builds from your linked chests: the defaults for each build"),
         HUD("HUD", "What shows on screen while building"),
         EFFECTS("Effects", "Sparkles, sounds and celebrations"),
         COLORS("Colours", "Ghost, mark and box colours"),
@@ -192,6 +193,7 @@ public final class SettingsScreen extends Screen {
             case GHOSTS -> {
                 c.ghostAlpha = d.ghostAlpha;
                 c.ghostShimmer = d.ghostShimmer;
+                c.ghostDistance = d.ghostDistance;
                 c.ghostBlockEntities = d.ghostBlockEntities;
             }
             case BUILDING -> {
@@ -214,8 +216,8 @@ public final class SettingsScreen extends Screen {
                 c.cornerModifier = d.cornerModifier;
                 c.countChests = d.countChests;
                 c.restockCount = d.restockCount;
-                c.autoBuildSpeed = d.autoBuildSpeed;
             }
+            case AUTOBUILD -> c.setAutoBuildDefaults(d.autoBuildDefaults(), d.autoBuildOnlyHeld);
             case HUD -> {
                 c.progressHud = d.progressHud;
                 c.crosshairHint = d.crosshairHint;
@@ -258,6 +260,8 @@ public final class SettingsScreen extends Screen {
                         Ui.slider(0.3, 1, 0.05, c.ghostAlpha, v -> Math.round(v * 100) + "%", v -> c.ghostAlpha = (float) v, null));
                 l.option("Shimmer", "A slight tint and a slow pulse that mark ghosts as not built yet.",
                         Ui.toggle(c.ghostShimmer, v -> c.ghostShimmer = v, null));
+                l.option("Ghost distance", "Ghosts further away than this aren't drawn, which keeps big schematics smooth. Progress is still counted everywhere.",
+                        Ui.slider(0, 256, 16, c.ghostDistance, v -> v < 1 ? "Unlimited" : Math.round(v) + " blocks", v -> c.ghostDistance = (int) Math.round(v), null));
                 l.option("Real shapes", "Chests, signs, beds, banners and heads drawn with their real shapes.",
                         Ui.toggle(c.ghostBlockEntities, v -> c.ghostBlockEntities = v, null));
                 l.option("Ghost colours", "The tint, wrong and in-the-way colours are in the Colours section.",
@@ -319,8 +323,17 @@ public final class SettingsScreen extends Screen {
                         Ui.toggle(c.countChests, v -> c.countChests = v, null));
                 l.option("Fetch from chests", "How many easy place asks for at once from your linked chests (BlockCompanion servers).",
                         Ui.cycle(List.of(16, 32, 64, 128, 256, 576), c.restockCount, n -> n == 576 ? "9 stacks" : n + "", v -> c.restockCount = v, null));
-                l.option("AutoBuild speed", "Blocks a second AutoBuild places (Resources step of the B screen). The server may allow less.",
-                        Ui.cycle(List.of(1, 2, 5, 10, 20, 40), c.autoBuildSpeed, n -> n + " a second", v -> c.autoBuildSpeed = v, null));
+                l.option("AutoBuild", "Its speed, order and the rest are in the AutoBuild section.",
+                        Ui.button("AutoBuild...", null, b -> selectTab(Tab.AUTOBUILD)));
+            }
+            case AUTOBUILD -> {
+                // Start it from the Resources step of the B screen; its Options button changes one build without touching these.
+                io.blockcompanion.core.sync.SyncClient sync = io.blockcompanion.network.ClientSync.client();
+                io.blockcompanion.core.sync.Features server = sync == null || !sync.serverPresent() ? null : sync.features();
+                AutoBuildRows.fill(l, c.autoBuildDefaults(), c.autoBuildOnlyHeld, server, (o, held) -> {
+                    c.setAutoBuildDefaults(o, held);
+                    changed();
+                });
             }
             case HUD -> {
                 l.header("On screen");

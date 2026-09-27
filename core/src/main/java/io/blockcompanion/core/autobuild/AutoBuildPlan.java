@@ -40,7 +40,9 @@ public final class AutoBuildPlan {
         /** A block no item places (fire, portals, piston heads, flowing fluids, a half without its other half): skipped. */
         FREE,
         /** A fluid source (water, lava, powder snow): AutoBuild doesn't pour buckets, so it is skipped. */
-        FLUID
+        FLUID,
+        /** Air in the schematic: whatever stands there is removed, when the options clear air ({@link AutoBuildOptions#clearsAir}). */
+        CLEAR
     }
 
     /** One block in world coordinates, with the state the schematic wants there (already turned with the placement). */
@@ -79,6 +81,15 @@ public final class AutoBuildPlan {
 
     /** Every schematic block of the placement, in build order. */
     public static List<Step> plan(Placement p) {
+        return plan(p, null);
+    }
+
+    /**
+     * Every schematic block of the placement in build order, plus a {@link Kind#CLEAR} step for each air cell of the
+     * schematic that {@code clearAir} accepts (world coordinates, state air): the ones with something to clear. Null
+     * plans no air.
+     */
+    public static List<Step> plan(Placement p, Predicate<Cell> clearAir) {
         Map<Long, Cell> cells = new HashMap<>();
         List<Cell> order = new ArrayList<>();
         p.structure().forEachBlock((x, y, z, s) -> {
@@ -89,7 +100,35 @@ public final class AutoBuildPlan {
             cells.put(BlockPos.pack(w.x(), w.y(), w.z()), c);
             order.add(c);
         });
-        return plan(cells, order);
+        List<Step> steps = plan(cells, order);
+        if (clearAir == null) return steps;
+        // The schematic's air: every empty cell inside its bounds (structure void is "leave alone", not air).
+        List<Cell> air = new ArrayList<>();
+        p.structure().bounds().ifPresent(b -> {
+            for (int y = b.minY(); y <= b.maxY(); y++) {
+                for (int z = b.minZ(); z <= b.maxZ(); z++) {
+                    for (int x = b.minX(); x <= b.maxX(); x++) {
+                        if (!p.structure().get(x, y, z).isAir()) continue;
+                        BlockPos w = p.toWorld(x, y, z);
+                        Cell c = new Cell(w.x(), w.y(), w.z(), BlockState.AIR);
+                        if (clearAir.test(c)) air.add(c);
+                    }
+                }
+            }
+        });
+        if (air.isEmpty()) return steps;
+        List<Step> all = new ArrayList<>(steps.size() + air.size());
+        all.addAll(steps);
+        all.addAll(clearSteps(air));
+        all.sort(ORDER);
+        return all;
+    }
+
+    /** {@link Kind#CLEAR} steps for air cells (world coordinates). */
+    public static List<Step> clearSteps(List<Cell> air) {
+        List<Step> out = new ArrayList<>(air.size());
+        for (Cell c : air) out.add(new Step(new Cell(c.x(), c.y(), c.z(), BlockState.AIR), List.of(), Map.of(), Kind.CLEAR, c.y(), false));
+        return out;
     }
 
     /** Plans loose cells (world coordinates, turned states); what {@link #plan(Placement)} does after reading the schematic. */
@@ -124,8 +163,9 @@ public final class AutoBuildPlan {
         return steps;
     }
 
-    /** Build order: layer, then free-standing before attached, then z, then x. */
+    /** Build order: layer, then clearing before placing, then free-standing before attached, then z, then x. */
     public static final Comparator<Step> ORDER = Comparator.comparingInt(Step::order)
+            .thenComparing(s -> s.kind() != Kind.CLEAR)
             .thenComparing(Step::attached)
             .thenComparingInt(s -> s.main().z())
             .thenComparingInt(s -> s.main().x())
@@ -235,5 +275,31 @@ public final class AutoBuildPlan {
      */
     public static boolean needsPlacing(Step s, BlockState inWorld) {
         return Compare.classify(s.main().state(), inWorld) == Compare.Result.MISSING;
+    }
+
+    /** Whether the options build this step at all: clearing only when they clear air, and only the chosen item's blocks. */
+    public static boolean inScope(Step s, AutoBuildOptions o) {
+        if (s.kind() == Kind.CLEAR) return o.clearsAir() && o.onlyItem().isEmpty();
+        return o.onlyItem().isEmpty() || s.items().containsKey(o.onlyItem());
+    }
+
+    /**
+     * Whether a step still needs work with these options, given what is in the world at its main cell: an empty spot
+     * to fill, or a different block the replace mode may break ({@code removal} is asked only then), or for a
+     * {@link Kind#CLEAR} step anything standing where the schematic has air that may be broken.
+     */
+    public static boolean needsWork(Step s, BlockState inWorld, AutoBuildOptions o, java.util.function.Supplier<BuildWorld.Removal> removal) {
+        if (!inScope(s, o)) return false;
+        Compare.Result r = Compare.classify(s.main().state(), inWorld);
+        if (s.kind() == Kind.CLEAR) return r == Compare.Result.EXTRA && o.mayBreak(removal.get());
+        if (r == Compare.Result.MISSING) return true;
+        return r == Compare.Result.WRONG && o.replace().breaks() && o.mayBreak(removal.get());
+    }
+
+    /** How many {@link Kind#CLEAR} steps {@code toClear} accepts. */
+    public static long countClears(List<Step> steps, Predicate<Step> toClear) {
+        long n = 0;
+        for (Step s : steps) if (s.kind() == Kind.CLEAR && toClear.test(s)) n++;
+        return n;
     }
 }

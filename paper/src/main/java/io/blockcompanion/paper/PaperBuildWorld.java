@@ -1,17 +1,30 @@
 package io.blockcompanion.paper;
 
 import io.blockcompanion.core.autobuild.BuildWorld;
+import io.blockcompanion.core.chests.LinkedChests;
 import io.blockcompanion.core.model.BlockState;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.Chest;
+import org.bukkit.block.Container;
+import org.bukkit.block.TileState;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.BoundingBox;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -91,8 +104,71 @@ final class PaperBuildWorld implements BuildWorld {
         Block b = block(dimension, x, y, z);
         BlockData d = data(state);
         if (b == null || d == null) return false;
-        b.setBlockData(d, true);
+        b.setBlockData(d, false);
         return true;
+    }
+
+    @Override
+    public Removal removal(String dimension, int x, int y, int z) {
+        Block b = block(dimension, x, y, z);
+        if (b == null || b.isEmpty()) return Removal.NEVER;
+        Material m = b.getType();
+        // Bedrock, barriers, portals, command and structure blocks can't be broken by hand: never by AutoBuild either.
+        if (m.getHardness() < 0) return Removal.NEVER;
+        if (b.getState() instanceof TileState) return Removal.OTHER;
+        return m.isSolid() && fullCube(b) ? Removal.SOLID : Removal.OTHER;
+    }
+
+    /** True when the block's collision is one whole cube (not a slab, stair, fence or wall). */
+    private static boolean fullCube(Block b) {
+        Collection<BoundingBox> boxes = b.getCollisionShape().getBoundingBoxes();
+        if (boxes.size() != 1) return false;
+        BoundingBox box = boxes.iterator().next();
+        return box.getVolume() >= 0.999;
+    }
+
+    @Override
+    public boolean replace(String dimension, int x, int y, int z, BlockState state, Drops drops) {
+        Block b = block(dimension, x, y, z);
+        BlockData d = state.isAir() ? Material.AIR.createBlockData() : data(state);
+        if (b == null || d == null) return false;
+        List<ItemStack> stacks = new ArrayList<>();
+        // What a container held, always (Bukkit would delete it when the block is set), taken out first: a shulker box
+        // then drops empty instead of with a copy of it...
+        if (b.getState() instanceof Container c) {
+            Inventory inv = c instanceof Chest chest ? chest.getBlockInventory() : c.getInventory();
+            for (ItemStack st : inv.getContents()) if (st != null && !st.getType().isAir()) stacks.add(st.clone());
+            inv.clear();
+        }
+        // ...and what breaking it by hand would drop (nothing in creative).
+        if (drops != null) stacks.addAll(b.getDrops());
+        LinkedHashSet<LinkedChests.Pos> filled = new LinkedHashSet<>();
+        Location at = b.getLocation().add(0.5, 0.5, 0.5);
+        for (ItemStack st : stacks) {
+            ItemStack left = st;
+            // Into the linked chests in order (survival), the rest on the ground.
+            if (drops != null) {
+                for (LinkedChests.Pos c : drops.chests()) {
+                    if (left == null) break;
+                    int before = left.getAmount();
+                    left = PaperChestAccess.insert(c.dimension(), c.x(), c.y(), c.z(), left);
+                    if (left == null || left.getAmount() != before) filled.add(c);
+                }
+            }
+            if (left != null && left.getAmount() > 0) b.getWorld().dropItemNaturally(at, left);
+        }
+        if (drops != null) filled.forEach(drops::filled);
+        b.setBlockData(d, false);
+        return true;
+    }
+
+    @Override
+    public double[] position(UUID player, String dimension) {
+        Player p = Bukkit.getPlayer(player);
+        World w = PaperChestAccess.world(dimension);
+        if (p == null || w == null || !p.getWorld().equals(w)) return null;
+        Location l = p.getLocation();
+        return new double[]{l.getX(), l.getY(), l.getZ()};
     }
 
     @Override

@@ -1,11 +1,14 @@
 package io.blockcompanion.core.sync;
 
 import io.blockcompanion.core.autobuild.AutoBuildJob;
+import io.blockcompanion.core.autobuild.AutoBuildOptions;
 import io.blockcompanion.core.autobuild.AutoBuildPlan;
 import io.blockcompanion.core.autobuild.BuildWorld;
 import io.blockcompanion.core.chests.LinkedChests;
+import io.blockcompanion.core.compare.Compare;
 import io.blockcompanion.core.library.SchematicLibrary;
 import io.blockcompanion.core.model.BlockPos;
+import io.blockcompanion.core.model.BlockState;
 import io.blockcompanion.core.model.Structure;
 import io.blockcompanion.core.placement.Placement;
 
@@ -254,8 +257,10 @@ public final class SyncServer {
             case Message.Lock l -> lock(s, actor, l);
             case Message.ChestLink l -> chestLink(s, l);
             case Message.ChestRestock r -> chestRestock(s, r);
-            case Message.AutoBuildStart b -> autoBuildStart(s, actor, b);
+            case Message.AutoBuildStart b -> autoBuildStart(s, actor, b.hash(), b.pose(), AutoBuildOptions.ofRate(b.blocksPerSecond()), b.chests());
+            case Message.AutoBuildBegin b -> autoBuildStart(s, actor, b.hash(), b.pose(), b.options(), b.chests());
             case Message.AutoBuildControl c -> autoBuildControl(s, actor, c);
+            case Message.AutoBuildSetOptions o -> autoBuildOptions(s, actor, o);
             default -> {
                 // Server-to-client types coming the wrong way: ignore.
             }
@@ -292,7 +297,8 @@ public final class SyncServer {
         return new Features(config.enabled && a.has(Permission.USE), config.maxFileSize, a.admin() ? -1 : config.playerQuota,
                 store.usedBy(peer.id()), Protocol.CHUNK_SIZE, Permission.mask(a.permissions()), config.allowAutoPlace,
                 config.autoPlaceRange, config.autoPlaceRate, config.allowCreativeFill, chestsAllowed(),
-                config.allowEasyPlace, config.allowEasyPlaceAuto, autoBuildAllowed(), config.autoBuildMaxRate);
+                config.allowEasyPlace, config.allowEasyPlaceAuto, autoBuildAllowed(), config.autoBuildMaxRate, true,
+                config.autoBuildReplace, config.autoBuildMaxRadius);
     }
 
     private void sendFeatures(Session s) {
@@ -729,7 +735,22 @@ public final class SyncServer {
      * (uses up) items across them in link order, subtracting what it took from what is known.
      */
     private AutoBuildJob.Supplies supplies(List<LinkedChests.Pos> list) {
+        BuildWorld.Drops drops = new BuildWorld.Drops() {
+            public List<LinkedChests.Pos> chests() {
+                return list;
+            }
+
+            public void filled(LinkedChests.Pos p) {
+                // Drops went in: read it again (rare next to taking, which only subtracts).
+                read(p);
+                for (Session s : sessions.values()) if (chestLinks.has(s.peer.id(), p)) s.chestsDirty = true;
+            }
+        };
         return new AutoBuildJob.Supplies() {
+            public BuildWorld.Drops drops() {
+                return drops;
+            }
+
             public long count(String item) {
                 long n = 0;
                 for (LinkedChests.Pos p : list) n += has(p, item);
@@ -751,7 +772,27 @@ public final class SyncServer {
         };
     }
 
-    private void autoBuildStart(Session s, LockRules.Actor actor, Message.AutoBuildStart m) {
+    /** The options as this server lets them run. */
+    private AutoBuildOptions cap(AutoBuildOptions o) {
+        return o.capped(config.autoBuildMaxRate, config.autoBuildReplace, config.autoBuildMaxRadius);
+    }
+
+    /** Plans a placement for AutoBuild: its blocks, and with air cleared the air cells that have something to clear. */
+    private List<AutoBuildPlan.Step> planFor(Placement p, String dim, AutoBuildOptions options) {
+        if (!options.clearsAir() || !options.onlyItem().isEmpty()) return AutoBuildPlan.plan(p);
+        // Only air cells with something there now (or not loaded, so not known yet) become steps.
+        return AutoBuildPlan.plan(p, c -> !buildWorld.isLoaded(dim, c.x(), c.y(), c.z())
+                || Compare.classify(BlockState.AIR, buildWorld.get(dim, c.x(), c.y(), c.z())) == Compare.Result.EXTRA);
+    }
+
+    private Placement placementOf(SchematicInfo info, PlacementPose pose) throws IOException {
+        Placement p = new Placement(info.name(), loadShared(info), new BlockPos(pose.x(), pose.y(), pose.z()));
+        p.setOrientation(pose.rotation(), pose.mirrored());
+        return p;
+    }
+
+    private void autoBuildStart(Session s, LockRules.Actor actor, String hash, PlacementPose pose, AutoBuildOptions asked,
+                                List<LinkedChests.Pos> askedChests) {
         if (!autoBuildAllowed()) {
             notice(s, true, "This server has AutoBuild turned off");
             return;
@@ -760,19 +801,18 @@ public final class SyncServer {
             notice(s, true, "You may not use AutoBuild on this server");
             return;
         }
-        SchematicInfo info = store.schematic(m.hash());
+        SchematicInfo info = store.schematic(hash);
         if (info == null) {
             notice(s, true, "Upload the schematic before starting AutoBuild");
             return;
         }
-        PlacementPose pose = m.pose();
         if (!validPose(pose) || !buildWorld.dimensionExists(pose.dimension())) {
             notice(s, true, "AutoBuild can't reach that placement's dimension");
             return;
         }
         int mine = 0;
         for (RunningBuild r : autoBuilds.values()) {
-            if (r.job.hash().equals(m.hash()) && r.pose.equals(pose)) {
+            if (r.job.hash().equals(hash) && r.pose.equals(pose)) {
                 notice(s, true, "AutoBuild is already running on " + r.job.name());
                 sendAutoBuild(s, r);
                 return;
@@ -783,48 +823,87 @@ public final class SyncServer {
             notice(s, true, "You can run at most " + MAX_AUTOBUILDS_PER_PLAYER + " AutoBuilds at once");
             return;
         }
+        AutoBuildOptions options = cap(asked);
+        String dim = pose.dimension();
         List<AutoBuildPlan.Step> steps;
         try {
-            Placement p = new Placement(info.name(), loadShared(info), new BlockPos(pose.x(), pose.y(), pose.z()));
-            p.setOrientation(pose.rotation(), pose.mirrored());
-            steps = AutoBuildPlan.plan(p);
+            steps = planFor(placementOf(info, pose), dim, options);
         } catch (IOException | RuntimeException e) {
             notice(s, true, "Could not read " + info.name() + ": " + e.getMessage());
             return;
         }
-        String dim = pose.dimension();
-        Predicate<AutoBuildPlan.Step> toPlace = st -> {
+        Predicate<AutoBuildPlan.Step> toDo = st -> {
             AutoBuildPlan.Cell c = st.main();
             // Not loaded: count it, as the client's progress does for blocks it hasn't seen.
-            return !buildWorld.isLoaded(dim, c.x(), c.y(), c.z()) || AutoBuildPlan.needsPlacing(st, buildWorld.get(dim, c.x(), c.y(), c.z()));
+            if (!buildWorld.isLoaded(dim, c.x(), c.y(), c.z())) return AutoBuildPlan.inScope(st, options);
+            return AutoBuildPlan.needsWork(st, buildWorld.get(dim, c.x(), c.y(), c.z()), options,
+                    () -> buildWorld.removal(dim, c.x(), c.y(), c.z()));
         };
-        long count = AutoBuildPlan.count(steps, toPlace);
-        if (count == 0) {
-            notice(s, false, "Nothing left to place in " + displayName(info.name()));
+        long count = AutoBuildPlan.count(steps, toDo);
+        long clears = AutoBuildPlan.countClears(steps, toDo);
+        if (count == 0 && clears == 0) {
+            notice(s, false, "Nothing left to " + (options.onlyItem().isEmpty() ? "place" : "place of that block") + " in "
+                    + displayName(info.name()));
             return;
         }
-        List<LinkedChests.Pos> own = ownChests(actor.id(), m.chests());
+        List<LinkedChests.Pos> own = ownChests(actor.id(), askedChests);
         // Starting is rare: read the chests once so the check below (and the run) starts from what is really there.
         for (LinkedChests.Pos p : own) read(p);
         if (!own.isEmpty()) sendChests(s, false);
-        if (!buildWorld.isCreative(actor.id())) {
+        if (!buildWorld.isCreative(actor.id()) && count > 0) {
             // Survival and adventure build from the linked chests; checked here, whatever the client counted.
             if (own.isEmpty()) {
                 notice(s, true, "Link chests with the materials before starting AutoBuild");
                 return;
             }
-            Map<String, Long> shortfall = AutoBuildPlan.shortfall(AutoBuildPlan.required(steps, toPlace), chestTotals(own));
-            if (!shortfall.isEmpty()) {
+            Map<String, Long> shortfall = AutoBuildPlan.shortfall(AutoBuildPlan.required(steps, toDo), chestTotals(own));
+            if (!shortfall.isEmpty() && !options.skipMissing()) {
                 notice(s, true, AutoBuildPlan.describeShort(shortfall, 4) + ": AutoBuild didn't start");
                 return;
             }
         }
-        int rate = Math.max(1, Math.min(config.autoBuildMaxRate, m.blocksPerSecond()));
-        AutoBuildJob job = new AutoBuildJob(UUID.randomUUID(), actor.id(), info.hash(), displayName(info.name()), dim, steps, rate);
+        AutoBuildJob job = new AutoBuildJob(UUID.randomUUID(), actor.id(), info.hash(), displayName(info.name()), dim, steps, options);
         RunningBuild r = new RunningBuild(job, pose, own);
         autoBuilds.put(job.id(), r);
-        log.info(actor.name() + " started AutoBuild of " + info.name() + " (" + count + " blocks, " + rate + " per second)");
-        notice(s, false, String.format(Locale.ROOT, "AutoBuild started: %s (%,d blocks, %d per second)", job.name(), count, rate));
+        String what = String.format(Locale.ROOT, "%,d %s", count, count == 1 ? "block" : "blocks") + (clears > 0 ? String.format(Locale.ROOT, ", %,d to clear", clears) : "");
+        log.info(actor.name() + " started AutoBuild of " + info.name() + " (" + what + ", " + options.describe() + ")");
+        notice(s, false, "AutoBuild started: " + job.name() + " (" + what + ", " + options.describe() + ")");
+        if (!options.equals(asked)) notice(s, false, "This server allows less: " + limits(asked, options));
+        sendAutoBuild(s, r);
+    }
+
+    /** What the server capped, for the player: "at most 20 blocks per second, no breaking blocks". */
+    private static String limits(AutoBuildOptions asked, AutoBuildOptions got) {
+        List<String> parts = new ArrayList<>();
+        if (got.blocksPerSecond() != asked.blocksPerSecond()) parts.add("at most " + got.blocksPerSecond() + " blocks per second");
+        if (got.replace() != asked.replace()) {
+            parts.add(got.replace() == AutoBuildOptions.Replace.KEEP ? "no breaking blocks" : "up to " + got.replace().label.toLowerCase(Locale.ROOT));
+        }
+        if (got.radius() != asked.radius()) parts.add("only within " + got.radius() + " blocks of you");
+        return String.join(", ", parts);
+    }
+
+    private void autoBuildOptions(Session s, LockRules.Actor actor, Message.AutoBuildSetOptions m) {
+        RunningBuild r = autoBuilds.get(m.job());
+        if (r == null || (!r.job.owner().equals(actor.id()) && !actor.admin())) return;
+        if (!autoBuildAllowed()) return;
+        AutoBuildOptions options = cap(m.options());
+        List<AutoBuildPlan.Step> air = List.of();
+        if (options.clearsAir() && options.onlyItem().isEmpty() && !r.job.hasClearSteps()) {
+            // Clearing switched on after the start: plan the schematic's air now.
+            SchematicInfo info = store.schematic(r.job.hash());
+            if (info != null) {
+                try {
+                    air = planFor(placementOf(info, r.pose), r.job.dimension(), options).stream()
+                            .filter(st -> st.kind() == AutoBuildPlan.Kind.CLEAR).toList();
+                } catch (IOException | RuntimeException e) {
+                    notice(s, true, "Could not read " + info.name() + ": " + e.getMessage());
+                }
+            }
+        }
+        r.job.setOptions(options, air);
+        notice(s, false, "AutoBuild: " + options.describe());
+        if (!options.equals(m.options())) notice(s, false, "This server allows less: " + limits(m.options(), options));
         sendAutoBuild(s, r);
     }
 

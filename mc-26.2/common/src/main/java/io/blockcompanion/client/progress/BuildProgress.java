@@ -55,6 +55,12 @@ public final class BuildProgress {
     private int stillTicks;
     /** Ticks a moved placement must stay put before counting starts again at its new spot. */
     private static final int SETTLE_TICKS = 10;
+    /**
+     * Single block changes update their cell at once, so the section re-marks that follow them (every section around
+     * the block, while light settles) only need a rescan now and then: at most once per section this often.
+     */
+    private static final long RESCAN_GAP_MS = 2000;
+    private final java.util.Map<Long, Long> scannedAt = new java.util.HashMap<>(), deferred = new java.util.HashMap<>();
 
     /** The tracker for the loaded placement, or null. */
     public ProgressTracker tracker() {
@@ -110,6 +116,8 @@ public final class BuildProgress {
         }
         scanQueue.clear();
         queued.clear();
+        deferred.clear();
+        scannedAt.clear();
         loadedColumns.clear();
         pollTicks = 0;
         fileWriter.changed();
@@ -125,6 +133,8 @@ public final class BuildProgress {
         fileWriter = null;
         scanQueue.clear();
         queued.clear();
+        deferred.clear();
+        scannedAt.clear();
         loadedColumns.clear();
     }
 
@@ -161,7 +171,10 @@ public final class BuildProgress {
     public void onSectionDirty(int sx, int sy, int sz) {
         if (!live()) return;
         long k = BlockPos.pack(sx, sy, sz);
-        if (tracker.sectionLoaded(sx, sy, sz) || loadedColumns.contains(BlockPos.pack(sx, 0, sz))) queue(k);
+        if (!tracker.sectionLoaded(sx, sy, sz) && !loadedColumns.contains(BlockPos.pack(sx, 0, sz))) return;
+        long due = scannedAt.getOrDefault(k, 0L) + RESCAN_GAP_MS;
+        if (due <= System.currentTimeMillis()) queue(k);
+        else if (!queued.contains(k)) deferred.merge(k, due, Math::min);
     }
 
     private void queue(long k) {
@@ -214,6 +227,7 @@ public final class BuildProgress {
                 loadedColumns.clear();
                 scanQueue.clear();
                 queued.clear();
+                deferred.clear();
             }
             nearBox = false;
         } else if (--pollTicks <= 0) {
@@ -221,9 +235,18 @@ public final class BuildProgress {
             pollChunks(level);
         }
         long start = System.nanoTime();
+        if (here && !deferred.isEmpty()) {
+            long due = System.currentTimeMillis();
+            deferred.entrySet().removeIf(e -> {
+                if (e.getValue() > due) return false;
+                queue(e.getKey());
+                return true;
+            });
+        }
         while (here && !scanQueue.isEmpty() && System.nanoTime() - start < SCAN_BUDGET_NANOS) {
             long k = scanQueue.poll();
             queued.remove(k);
+            scannedAt.put(k, System.currentTimeMillis());
             BlockPos s = BlockPos.unpack(k);
             if (!level.hasChunk(s.x(), s.z())) continue;
             net.minecraft.core.BlockPos.MutableBlockPos pos = new net.minecraft.core.BlockPos.MutableBlockPos();

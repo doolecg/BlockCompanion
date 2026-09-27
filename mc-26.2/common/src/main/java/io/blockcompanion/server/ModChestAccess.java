@@ -21,6 +21,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -162,5 +163,17 @@ final class ModChestAccess implements ChestAccess {
         }
         if (removed > 0) c.setChanged();
         return removed;
+    }
+
+    /**
+     * Puts a stack into the container at the position as a hopper would (filling matching stacks, then empty slots);
+     * returns what didn't fit (all of it when there is no container there or it isn't loaded). For AutoBuild's drops.
+     */
+    ItemStack insert(String dimension, int x, int y, int z, ItemStack stack) {
+        Container c = container(dimension, x, y, z);
+        if (c == null || stack.isEmpty()) return stack;
+        ItemStack left = HopperBlockEntity.addItem(null, c, stack.copy(), null);
+        if (left.getCount() != stack.getCount()) c.setChanged();
+        return left;
     }
 }

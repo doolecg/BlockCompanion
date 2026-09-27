@@ -79,6 +79,8 @@ means the server does.
 | 23 | `AUTOBUILD_START` | C→S | hash, Pose, varint blocks per second, list of ChestPos |
 | 24 | `AUTOBUILD_CONTROL` | C→S | uuid job, varint action (0 = PAUSE, 1 = RESUME, 2 = STOP) |
 | 25 | `AUTOBUILD_STATUS` | S→C | uuid job, hash, Pose, string name, varint state, varlong done, varlong total, varlong placed, varlong skipped, string message |
+| 26 | `AUTOBUILD_BEGIN` | C→S | hash, Pose, AutoBuildOptions, list of ChestPos (sent only to servers that announce `auto_build_options`; older ones get `AUTOBUILD_START`) |
+| 27 | `AUTOBUILD_SET_OPTIONS` | C→S | uuid job, AutoBuildOptions (changes a running AutoBuild; the owner, or an admin) |
 
 These structures appear inside the message bodies:
 
@@ -93,7 +95,21 @@ These structures appear inside the message bodies:
   editor uuid (a presence byte, then the uuid), editor name, varlong revision.
 - **ChestEntry:** dimension id, i32 x, i32 y, i32 z, bool valid, then a list of (string item id, varlong count).
 - **ChestPos:** dimension id, i32 x, i32 y, i32 z.
-- **AutoBuild states:** 0 `RUNNING`, 1 `WAITING` (for chunks to load), 2 `PAUSED`, 3 `FINISHED`, 4 `STOPPED`.
+- **AutoBuild states:** 0 `RUNNING`, 1 `WAITING` (for chunks to load, or for the player to come within the radius),
+  2 `PAUSED`, 3 `FINISHED`, 4 `STOPPED`.
+- **AutoBuildOptions:** a list of `(string key, i64 value)` pairs, then a list of `(string key, string value)` pairs.
+  As with `FEATURES`, a side skips keys it doesn't know and reads a missing key as its default, so options can be added
+  without a new protocol version.
+
+  | Key | Default | Meaning |
+  |---|---|---|
+  | `rate` | 5 | blocks per second, 1 to 1000 (the server caps it) |
+  | `replace` | 0 | what it may break: 0 `KEEP` (nothing), 1 `SOLID` (solid blocks in the way), 2 `ALL` (any block in the way), 3 `CLEAR` (as `ALL`, and blocks where the schematic has air when `ignore_air` is 0) |
+  | `order` | 0 | 0 `BOTTOM_UP`, 1 `TOP_DOWN`, 2 `NEAREST` (to the player, following them), 3 `BY_BLOCK` |
+  | `ignore_air` | 1 | 1: the schematic's air is never touched |
+  | `skip_missing` | 0 | 1: a block without items is skipped instead of pausing, and a start isn't refused for what is short |
+  | `radius` | 0 | only blocks within this many blocks of the player (0: the whole schematic) |
+  | `only_item` (text) | empty | only the blocks placed with this item ("build all of these") |
 - **Upload codes:**
 
   | Value | Code |
@@ -123,6 +139,9 @@ These structures appear inside the message bodies:
 | `easy_place` | 1 if easy place may be used (a right-click on a ghost places exactly its block, through normal placement packets). **A missing key means 1**, unlike the others: servers from before the key existed allowed it |
 | `easy_place_auto` | 1 if easy place's auto mode may be used (the missing blocks in reach placed by themselves). Never 1 while `easy_place` is 0. **A missing key means the same as `easy_place`** |
 | `auto_build`, `auto_build_rate` | 1 if this server runs AutoBuild (switched on, and the platform can place blocks and read chests), and the fastest it places in blocks per second. Who may start it is the `autobuild` permission bit |
+| `auto_build_options` | 1 if the server takes `AUTOBUILD_BEGIN` and `AUTOBUILD_SET_OPTIONS`. Without it a client sends `AUTOBUILD_START` with the speed only |
+| `auto_build_replace` | the most AutoBuild may break here, as the `replace` option (0: nothing) |
+| `auto_build_max_radius` | AutoBuild builds only within this many blocks of the player here; 0: no limit |
 
 The server sends `FEATURES` after the hello, again after a config reload, and again after the player's quota use
 changes. Easy place reads `easy_place` from `SyncClient.features()`; Milestone 3 will read the auto-place flag the
@@ -230,31 +249,44 @@ screen when the player closes it, and keeps them until the chest is opened again
 
 ### AutoBuild
 
-The server builds a placement from the player's linked chests (or for free in creative), block by block and layer by
-layer from the bottom. It runs in `SyncServer` with the planning in `core/autobuild` (`AutoBuildPlan`,
-`AutoBuildJob`); the platform only supplies a `BuildWorld` (read, check and set blocks, game mode, the ding).
+The server builds a placement from the player's linked chests (or for free in creative), block by block, in the order
+and with the options the player picked (`AutoBuildOptions`). It runs in `SyncServer` with the planning in
+`core/autobuild` (`AutoBuildPlan`, `AutoBuildJob`, `AutoBuildOptions`); the platform only supplies a `BuildWorld`
+(read, check, set and break blocks, where the player is, game mode, the ding).
 
 1. **Start:** the client uploads the schematic if the server lacks it (the usual upload), then sends
-   `AUTOBUILD_START` with the hash, the placement's Pose, the speed the player picked, and the linked chests to take
-   from.
+   `AUTOBUILD_BEGIN` with the hash, the placement's Pose, the options, and the linked chests to take from
+   (`AUTOBUILD_START`, with the speed only, to a server without `auto_build_options`). The server caps the options
+   (`autoBuildMaxBlocksPerSecond`, `autoBuildReplace`, `autoBuildMaxRadius`) and says in a `NOTICE` what it capped.
 2. **The server checks again:** AutoBuild on and the `autobuild` permission; the schematic is in the shared space; the
    dimension exists; no other AutoBuild runs on the same placement (hash and Pose) and the player runs fewer than 4.
-   It reads the schematic and plans it. Unless the player is in creative on the server (the client's word isn't
-   taken), only chests the player really linked count, and they must hold every item the blocks still to place take;
-   otherwise a `NOTICE` says what is short ("Short: 12 oak planks, 3 glass").
+   It reads the schematic and plans it (with air cleared, also the schematic's air cells that have something in them).
+   Unless the player is in creative on the server (the client's word isn't taken), only chests the player really
+   linked count, and they must hold every item the blocks still to place take (unless `skip_missing`); otherwise a
+   `NOTICE` says what is short ("Short: 12 oak planks, 3 glass").
 3. **Building:** each tick up to the speed (capped by `autoBuildMaxBlocksPerSecond`):
    - Positions that are already right are passed over (a door or trapdoor open or shut, powered or not, counts as
-     right). A different block is never broken: it is skipped and counted.
+     right). A different block is skipped and counted, unless the replace mode may break it: `SOLID` breaks full solid
+     blocks without a block entity, `ALL` and `CLEAR` anything breakable. Unbreakable blocks (bedrock, barriers,
+     portals, command blocks) are never broken. What breaks drops as if broken by hand, and a container's contents
+     come out too: into the linked chests in order (the server reads those chests again), the rest on the ground; in
+     creative only a container's contents drop.
+   - With `CLEAR` and `ignore_air` 0, blocks where the schematic has air are broken the same way.
+   - The order: bottom up, top down, nearest to the player (sorted again when they move) or by kind of block. With a
+     radius, blocks farther from the player wait (state `WAITING`) until they come near.
    - A door, bed or tall plant is one step: one item, both halves set together. The other half's position is not a
      step of its own.
    - Each block's items come out of the chests as it is placed (nothing in creative). Blocks are set directly, never
      used, so no door flips and no container opens.
-   - A block without support yet goes to the end of its layer and is tried once more; then it is skipped. Fluids and
-     blocks no item places are skipped.
-   - It waits while a step's chunk isn't loaded, pauses when an item runs out or the player leaves, and stops when the
-     dimension goes away.
+   - A block without support yet goes to the end of its layer (or kind) and is tried once more; bottom up it is then
+     skipped, in the other orders it gets one last bottom-up pass at the end. Fluids and blocks no item places are
+     skipped.
+   - It waits while a step's chunk isn't loaded, pauses when an item runs out (or skips the block with
+     `skip_missing`) or the player leaves, and stops when the dimension goes away.
 4. **Status:** `AUTOBUILD_STATUS` goes to the player when it starts, about twice a second while it runs, and when it
-   pauses, finishes or stops. `AUTOBUILD_CONTROL` pauses, resumes or stops it (the owner, or an admin).
+   pauses, finishes or stops. `AUTOBUILD_CONTROL` pauses, resumes or stops it and `AUTOBUILD_SET_OPTIONS` changes its
+   options (the owner, or an admin): the speed at once, anything else puts what is left in order again and gives
+   blocks skipped as in the way or without items another go.
 5. **Done:** the server plays a note-block bell for the player, at the player, and sends
    `NOTICE` "AutoBuild finished: Castle (N placed, M skipped)".
 
@@ -310,6 +342,8 @@ Config keys, with their defaults:
 | `allowEasyPlaceAuto` | true | announced to clients; with false, easy place's auto mode is off (easy place itself stays) |
 | `allowAutoBuild` | true | AutoBuild on or off (running ones stop when it goes off) |
 | `autoBuildMaxBlocksPerSecond` | 20 | the fastest AutoBuild may place; players pick their speed up to this |
+| `autoBuildReplace` | keep on a server, clear in singleplayer and on LAN | the most AutoBuild may break: `keep` (never), `solid` (solid blocks in the way), `all` (any block in the way, chests too) or `clear` (also where the schematic has air) |
+| `autoBuildMaxRadius` | 0 | above 0, AutoBuild builds only that near the player (0: no limit) |
 | `permission.*` | see Permissions | mod servers only |
 
 - **Missing keys:** they are written back with their defaults.
@@ -327,9 +361,9 @@ Config keys, with their defaults:
     `SharedStore`, `SyncServer`, `SyncPeer`, `SyncLog`.
   - `SyncClient` and `ClientPlacementModel`: the client side.
 - `core/src/main/java/io/blockcompanion/core/autobuild/`: `AutoBuildPlan` (order, steps, items, the chest check),
-  `AutoBuildJob` (running one) and `BuildWorld` (what the platform provides: `server/ModBuildWorld` on the mods,
-  `PaperBuildWorld` on Paper). The client side is `client/autobuild/AutoBuildClient` and the schematic screen's
-  Resources step.
+  `AutoBuildJob` (running one), `AutoBuildOptions` (one build's options) and `BuildWorld` (what the platform provides: `server/ModBuildWorld` on the mods,
+  `PaperBuildWorld` on Paper). The client side is `client/autobuild/AutoBuildClient`, the schematic screen's
+  Resources step and its options screen (`client/screen/AutoBuildScreen`, rows shared with Settings in `AutoBuildRows`).
 - `mc-1.21.1/common`
   - `network/SyncPayload`, `network/SyncNetwork`.
   - `server/ModSyncServer`.

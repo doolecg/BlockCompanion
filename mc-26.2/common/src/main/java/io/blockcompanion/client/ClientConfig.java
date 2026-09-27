@@ -80,6 +80,11 @@ public final class ClientConfig {
     public boolean ghostShimmer = true;
     /** Chests, signs, beds, banners, heads... drawn with their real shapes. */
     public boolean ghostBlockEntities = true;
+    /**
+     * Ghosts are drawn (and meshed) only this far from the player, in blocks; 0 draws all of them. Every ghost in view
+     * is drawn each frame, so a big schematic seen whole costs frames; progress is still followed everywhere.
+     */
+    public int ghostDistance = 64;
 
     /** Right-click on a ghost with its item places exactly that block. Can be toggled with its key. */
     public boolean easyPlace = true;
@@ -91,8 +96,20 @@ public final class ClientConfig {
     public int easyPlaceAutoRate = io.blockcompanion.core.easyplace.AutoPlacePlanner.DEFAULT_RATE;
     /** How many items one fetch from the linked chests asks for. */
     public int restockCount = 64;
-    /** AutoBuild's speed in blocks per second (the server may cap it). */
+    /** AutoBuild's speed in blocks per second (the server may cap it). The AutoBuild options start from these defaults. */
     public int autoBuildSpeed = 5;
+    /** What AutoBuild may break to put the schematic's block in place (the server may allow less). */
+    public io.blockcompanion.core.autobuild.AutoBuildOptions.Replace autoBuildReplace = io.blockcompanion.core.autobuild.AutoBuildOptions.Replace.KEEP;
+    /** Which blocks AutoBuild places first. */
+    public io.blockcompanion.core.autobuild.AutoBuildOptions.Order autoBuildOrder = io.blockcompanion.core.autobuild.AutoBuildOptions.Order.BOTTOM_UP;
+    /** The schematic's air is never touched; off (with Replace and clear) AutoBuild clears blocks where the schematic has air. */
+    public boolean autoBuildIgnoreAir = true;
+    /** A block the chests have no items for is skipped instead of pausing AutoBuild. */
+    public boolean autoBuildSkipMissing = false;
+    /** AutoBuild only builds within this many blocks of the player (0: the whole schematic). */
+    public int autoBuildRadius = 0;
+    /** AutoBuild builds only the block held in the hand when it starts ("build all of these"). */
+    public boolean autoBuildOnlyHeld = false;
     /** Middle click on a ghost picks its item. */
     public boolean pickGhost = true;
 
@@ -147,6 +164,23 @@ public final class ClientConfig {
     /** The settings screen tab last open. */
     public String settingsTab = "";
 
+    /** AutoBuild's options as set here (without the held block, which is looked up when it starts). */
+    public io.blockcompanion.core.autobuild.AutoBuildOptions autoBuildDefaults() {
+        return new io.blockcompanion.core.autobuild.AutoBuildOptions(autoBuildSpeed, autoBuildReplace, autoBuildOrder, autoBuildIgnoreAir,
+                autoBuildSkipMissing, autoBuildRadius, "");
+    }
+
+    /** Sets the AutoBuild defaults from a build's options ("Save as defaults" on the AutoBuild options screen). */
+    public void setAutoBuildDefaults(io.blockcompanion.core.autobuild.AutoBuildOptions o, boolean onlyHeld) {
+        autoBuildSpeed = o.blocksPerSecond();
+        autoBuildReplace = o.replace();
+        autoBuildOrder = o.order();
+        autoBuildIgnoreAir = o.ignoreAir();
+        autoBuildSkipMissing = o.skipMissing();
+        autoBuildRadius = o.radius();
+        autoBuildOnlyHeld = onlyHeld;
+    }
+
     public static ClientConfig load(Path file) {
         ClientConfig c = new ClientConfig();
         Properties p = new Properties();
@@ -170,6 +204,7 @@ public final class ClientConfig {
         // Version 1 files had faint ghosts (0.45); the near-solid look is the new default.
         c.ghostAlpha = version < 2 ? 0.85f : (float) parse(p.getProperty("ghost.alpha"), 0.85, 0.3, 1);
         c.ghostShimmer = bool(p, "ghost.shimmer", true);
+        c.ghostDistance = (int) parse(p.getProperty("ghost.distance"), 64, 0, 512);
         c.ghostBlockEntities = bool(p, "ghost.blockEntities", true);
         c.easyPlace = bool(p, "easyPlace.enabled", true);
         c.easyPlaceAutoPick = bool(p, "easyPlace.autoPick", true);
@@ -177,7 +212,15 @@ public final class ClientConfig {
         c.easyPlaceAutoRate = (int) parse(p.getProperty("easyPlace.autoRate"), io.blockcompanion.core.easyplace.AutoPlacePlanner.DEFAULT_RATE, 1,
                 io.blockcompanion.core.easyplace.AutoPlacePlanner.MAX_RATE);
         c.restockCount = (int) parse(p.getProperty("chests.restockCount"), 64, 1, 576);
-        c.autoBuildSpeed = (int) parse(p.getProperty("autoBuild.blocksPerSecond"), 5, 1, 100);
+        c.autoBuildSpeed = (int) parse(p.getProperty("autoBuild.blocksPerSecond"), 5, 1, io.blockcompanion.core.autobuild.AutoBuildOptions.MAX_RATE);
+        c.autoBuildReplace = io.blockcompanion.core.autobuild.AutoBuildOptions.Replace.parse(p.getProperty("autoBuild.replace"),
+                io.blockcompanion.core.autobuild.AutoBuildOptions.Replace.KEEP);
+        c.autoBuildOrder = io.blockcompanion.core.autobuild.AutoBuildOptions.Order.parse(p.getProperty("autoBuild.order"),
+                io.blockcompanion.core.autobuild.AutoBuildOptions.Order.BOTTOM_UP);
+        c.autoBuildIgnoreAir = bool(p, "autoBuild.ignoreAir", true);
+        c.autoBuildSkipMissing = bool(p, "autoBuild.skipMissing", false);
+        c.autoBuildRadius = (int) parse(p.getProperty("autoBuild.radius"), 0, 0, io.blockcompanion.core.autobuild.AutoBuildOptions.MAX_RADIUS);
+        c.autoBuildOnlyHeld = "held".equalsIgnoreCase(p.getProperty("autoBuild.only", "all").trim());
         c.pickGhost = bool(p, "pickBlock.ghosts", true);
         c.progressHud = bool(p, "hud.progress", true);
         c.crosshairHint = bool(p, "hud.hint", true);
@@ -233,6 +276,7 @@ public final class ClientConfig {
         p.setProperty("placement.reach", Double.toString(reach));
         p.setProperty("ghost.alpha", Float.toString(ghostAlpha));
         p.setProperty("ghost.shimmer", Boolean.toString(ghostShimmer));
+        p.setProperty("ghost.distance", Integer.toString(ghostDistance));
         p.setProperty("ghost.blockEntities", Boolean.toString(ghostBlockEntities));
         p.setProperty("easyPlace.enabled", Boolean.toString(easyPlace));
         p.setProperty("easyPlace.autoPick", Boolean.toString(easyPlaceAutoPick));
@@ -240,6 +284,12 @@ public final class ClientConfig {
         p.setProperty("easyPlace.autoRate", Integer.toString(easyPlaceAutoRate));
         p.setProperty("chests.restockCount", Integer.toString(restockCount));
         p.setProperty("autoBuild.blocksPerSecond", Integer.toString(autoBuildSpeed));
+        p.setProperty("autoBuild.replace", autoBuildReplace.key());
+        p.setProperty("autoBuild.order", autoBuildOrder.name());
+        p.setProperty("autoBuild.ignoreAir", Boolean.toString(autoBuildIgnoreAir));
+        p.setProperty("autoBuild.skipMissing", Boolean.toString(autoBuildSkipMissing));
+        p.setProperty("autoBuild.radius", Integer.toString(autoBuildRadius));
+        p.setProperty("autoBuild.only", autoBuildOnlyHeld ? "held" : "all");
         p.setProperty("pickBlock.ghosts", Boolean.toString(pickGhost));
         p.setProperty("hud.progress", Boolean.toString(progressHud));
         p.setProperty("hud.hint", Boolean.toString(crosshairHint));
@@ -265,7 +315,7 @@ public final class ClientConfig {
             Files.createDirectories(file.getParent());
             try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
                 p.store(w, "BlockCompanion. Also on the settings screen in the game. Modifiers: ALT, CTRL, SHIFT or NONE (that"
-                        + " action off); scroll.move.modifier + scroll.rotate.modifier together switch tool.mode. ghost.alpha 0.3 to 1. tool.item empty switches the selection tool off. boxes.show tool or always. tool.mode: MOVE or MIRROR. color.* are #RRGGBB. Keys are in Options > Controls.");
+                        + " action off); scroll.move.modifier + scroll.rotate.modifier together switch tool.mode. ghost.alpha 0.3 to 1. tool.item empty switches the selection tool off. boxes.show tool or always. tool.mode: MOVE or MIRROR. autoBuild.replace: keep, solid, all or clear. autoBuild.order: BOTTOM_UP, TOP_DOWN, NEAREST or BY_BLOCK. autoBuild.radius 0 builds the whole schematic. autoBuild.only: all or held. color.* are #RRGGBB. Keys are in Options > Controls.");
             }
         } catch (IOException e) {
             BlockCompanionClient.LOG.warn("Could not write {}: {}", file, e.toString());

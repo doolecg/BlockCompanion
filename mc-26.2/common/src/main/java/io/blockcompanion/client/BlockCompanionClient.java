@@ -378,6 +378,7 @@ public final class BlockCompanionClient {
         if (ChestSelfTest.ENABLED) ChestSelfTest.tick(mc);
         if (UiSelfTest.ENABLED) UiSelfTest.tick(mc);
         if (++ticksSinceChange >= 40) saveNow();
+        checkOverlaps();
     }
 
     /** True (and says so) when {@code what} is locked on the placement. */
@@ -484,12 +485,16 @@ public final class BlockCompanionClient {
         boolean own = OWN.mine(pos.getX(), pos.getY(), pos.getZ(), System.currentTimeMillis());
         for (LoadedPlacement lp : PLACEMENTS) {
             if (!here(lp) || !lp.placement.worldBox().contains(pos.getX(), pos.getY(), pos.getZ())) continue;
+            lp.ghosts.onCellChanged(pos.getX(), pos.getY(), pos.getZ());
             ProgressTracker.Change c = lp.progress.onBlockChanged(pos.getX(), pos.getY(), pos.getZ(), state, own);
             // Counted even while hidden; the effects only play while the schematic shows.
             if (c == null || !lp.visible) continue;
             if (c.after() == ProgressTracker.Status.CORRECT) {
-                lp.ghosts.pop(c.x(), c.y(), c.z(), lp.placement.stateAt(c.x(), c.y(), c.z()));
-                EFFECTS.correct(mc.level, c.x(), c.y(), c.z());
+                // AutoBuild's blocks arrive several a second: no pop or sparkles for those, they cost frames.
+                if (own || !io.blockcompanion.client.autobuild.AutoBuildClient.active(lp)) {
+                    lp.ghosts.pop(c.x(), c.y(), c.z(), lp.placement.stateAt(c.x(), c.y(), c.z()));
+                    EFFECTS.correct(mc.level, c.x(), c.y(), c.z());
+                }
                 ProgressTracker t = lp.progress.tracker();
                 if (c.allCompleted() && !t.stats().finished) {
                     t.stats().finished = true;
@@ -1349,5 +1354,52 @@ public final class BlockCompanionClient {
     public static void actionBar(String message) {
         LocalPlayer p = Minecraft.getInstance().player;
         if (p != null) p.sendOverlayMessage(Component.literal(message));
+    }
+
+    // ---- overlapping placements ------------------------------------------------------------------------------------
+
+    /** Pairs of placements (by slot) already warned about, until they stop overlapping. */
+    private static final java.util.Set<Long> OVERLAP_WARNED = new java.util.HashSet<>();
+    private static int overlapTicks;
+
+    /**
+     * Every 2 seconds: two shown placements in this dimension that sit mostly on top of each other (at least half of the
+     * smaller one) are usually one loaded twice. Both are drawn, counted and built, which costs frames and has AutoBuild
+     * build over itself, so say so once in chat. Warned again only after they have been apart.
+     */
+    private static void checkOverlaps() {
+        if (++overlapTicks < 40) return;
+        overlapTicks = 0;
+        java.util.Set<Long> now = new java.util.HashSet<>();
+        for (int i = 0; i < PLACEMENTS.size(); i++) {
+            LoadedPlacement a = PLACEMENTS.get(i);
+            if (!a.visible || !here(a)) continue;
+            Box ab = a.placement.worldBox();
+            for (int j = i + 1; j < PLACEMENTS.size(); j++) {
+                LoadedPlacement b = PLACEMENTS.get(j);
+                if (!b.visible || !here(b) || !a.dimension.equals(b.dimension)) continue;
+                Box bb = b.placement.worldBox();
+                if (ab.overlap(bb) * 2 < Math.min(ab.volume(), bb.volume())) continue;
+                long pair = ((long) Math.min(a.slot, b.slot) << 32) | Math.max(a.slot, b.slot);
+                now.add(pair);
+                if (OVERLAP_WARNED.add(pair)) {
+                    String what = a.name().equals(b.name()) ? a.shortName() + " is loaded twice in the same place"
+                            : a.shortName() + " and " + b.shortName() + " are on top of each other";
+                    chat(what + ": both are drawn and built, which costs frames. Move or unload one (" + keyName("library") + ").");
+                }
+            }
+        }
+        OVERLAP_WARNED.retainAll(now);
+    }
+
+    /** A line in chat, marked as BlockCompanion's. */
+    private static void chat(String message) {
+        LocalPlayer p = Minecraft.getInstance().player;
+        if (p != null) p.sendSystemMessage(line(message));
+    }
+
+    private static Component line(String message) {
+        return Component.literal("[BlockCompanion] ").withStyle(net.minecraft.ChatFormatting.DARK_AQUA)
+                .append(Component.literal(message).withStyle(net.minecraft.ChatFormatting.GRAY));
     }
 }

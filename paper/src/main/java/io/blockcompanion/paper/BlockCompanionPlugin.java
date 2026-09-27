@@ -50,7 +50,7 @@ public final class BlockCompanionPlugin extends JavaPlugin implements PluginMess
     public void onEnable() {
         Path data = getDataFolder().toPath();
         configFile = data.resolve("config.properties");
-        SyncConfig config = SyncConfig.load(configFile);
+        SyncConfig config = SyncConfig.load(configFile, true);
         // One shared space per server, stored under the main world's name so a new world starts a fresh one.
         List<World> worlds = getServer().getWorlds();
         String level = worlds.isEmpty() ? "world" : worlds.get(0).getName();
@@ -156,7 +156,7 @@ public final class BlockCompanionPlugin extends JavaPlugin implements PluginMess
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (sync == null) return true;
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-            sync.setConfig(SyncConfig.load(configFile));
+            sync.setConfig(SyncConfig.load(configFile, true));
             sender.sendMessage("BlockCompanion config reloaded.");
             return true;
         }

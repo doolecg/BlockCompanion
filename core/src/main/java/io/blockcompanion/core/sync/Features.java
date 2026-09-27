@@ -1,5 +1,7 @@
 package io.blockcompanion.core.sync;
 
+import io.blockcompanion.core.autobuild.AutoBuildOptions;
+
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -29,14 +31,42 @@ import java.util.Set;
  *                            here; whether this player may start it is {@link Permission#AUTOBUILD}. A server that
  *                            doesn't send the key has no AutoBuild
  * @param autoBuildRate       the fastest AutoBuild the server allows, in blocks per second
+ * @param autoBuildOptions    the server takes AutoBuild's options ({@link Message.AutoBuildBegin},
+ *                            {@link Message.AutoBuildSetOptions}); without, only {@link Message.AutoBuildStart} and its speed
+ * @param autoBuildReplace    the most AutoBuild may break here ({@link AutoBuildOptions.Replace}); a server that doesn't
+ *                            send the key allows nothing
+ * @param autoBuildMaxRadius  AutoBuild only builds within this many blocks of the player here; 0: no limit
  */
 public record Features(boolean syncEnabled, long maxFileSize, long playerQuota, long playerUsed, int chunkSize, int permissions,
                        boolean autoPlaceAllowed, int autoPlaceRange, int autoPlaceRate, boolean creativeFillAllowed,
                        boolean chestBuildAllowed, boolean easyPlaceAllowed, boolean easyPlaceAutoAllowed,
-                       boolean autoBuildAllowed, int autoBuildRate) {
+                       boolean autoBuildAllowed, int autoBuildRate, boolean autoBuildOptions, AutoBuildOptions.Replace autoBuildReplace,
+                       int autoBuildMaxRadius) {
 
     public Features {
         easyPlaceAutoAllowed = easyPlaceAutoAllowed && easyPlaceAllowed;
+        if (autoBuildReplace == null) autoBuildReplace = AutoBuildOptions.Replace.KEEP;
+        autoBuildMaxRadius = Math.max(0, autoBuildMaxRadius);
+    }
+
+    /** Features whose AutoBuild takes only a speed (as from a server that doesn't send {@code auto_build_options}). */
+    public Features(boolean syncEnabled, long maxFileSize, long playerQuota, long playerUsed, int chunkSize, int permissions,
+                    boolean autoPlaceAllowed, int autoPlaceRange, int autoPlaceRate, boolean creativeFillAllowed,
+                    boolean chestBuildAllowed, boolean easyPlaceAllowed, boolean easyPlaceAutoAllowed,
+                    boolean autoBuildAllowed, int autoBuildRate) {
+        this(syncEnabled, maxFileSize, playerQuota, playerUsed, chunkSize, permissions, autoPlaceAllowed, autoPlaceRange, autoPlaceRate,
+                creativeFillAllowed, chestBuildAllowed, easyPlaceAllowed, easyPlaceAutoAllowed, autoBuildAllowed, autoBuildRate, false,
+                AutoBuildOptions.Replace.KEEP, 0);
+    }
+
+    /**
+     * The options as this server runs them: speed, breaking and radius capped. A server without {@code auto_build_options}
+     * takes only the speed and builds the 0.3.0 way (bottom up, never breaking, the whole schematic).
+     */
+    public AutoBuildOptions cap(AutoBuildOptions o) {
+        int maxRate = autoBuildRate <= 0 ? AutoBuildOptions.MAX_RATE : autoBuildRate;
+        if (!autoBuildOptions) return AutoBuildOptions.ofRate(Math.min(maxRate, o.blocksPerSecond()));
+        return o.capped(maxRate, autoBuildReplace, autoBuildMaxRadius);
     }
 
     /** Features without AutoBuild (as from a server that doesn't send {@code auto_build}). */
@@ -83,6 +113,9 @@ public record Features(boolean syncEnabled, long maxFileSize, long playerQuota, 
         m.put("easy_place_auto", easyPlaceAutoAllowed ? 1L : 0L);
         m.put("auto_build", autoBuildAllowed ? 1L : 0L);
         m.put("auto_build_rate", (long) autoBuildRate);
+        m.put("auto_build_options", autoBuildOptions ? 1L : 0L);
+        m.put("auto_build_replace", (long) autoBuildReplace.ordinal());
+        m.put("auto_build_max_radius", (long) autoBuildMaxRadius);
         return m;
     }
 
@@ -98,7 +131,15 @@ public record Features(boolean syncEnabled, long maxFileSize, long playerQuota, 
                 easyPlace != 0,
                 // A missing easy_place_auto follows easy_place: servers from before it existed allowed what easy place was.
                 m.getOrDefault("easy_place_auto", easyPlace) != 0,
-                m.getOrDefault("auto_build", 0L) != 0, m.getOrDefault("auto_build_rate", 0L).intValue());
+                m.getOrDefault("auto_build", 0L) != 0, m.getOrDefault("auto_build_rate", 0L).intValue(),
+                m.getOrDefault("auto_build_options", 0L) != 0, replace(m.getOrDefault("auto_build_replace", 0L)),
+                (int) Math.max(0, Math.min(AutoBuildOptions.MAX_RADIUS, m.getOrDefault("auto_build_max_radius", 0L))));
+    }
+
+    private static AutoBuildOptions.Replace replace(long id) {
+        AutoBuildOptions.Replace[] all = AutoBuildOptions.Replace.values();
+        // A newer server's mode this side doesn't know yet: the most this side knows.
+        return id < 0 ? AutoBuildOptions.Replace.KEEP : all[(int) Math.min(all.length - 1, id)];
     }
 
     void write(Wire.Out out) {

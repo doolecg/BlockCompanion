@@ -50,7 +50,7 @@ import java.util.Set;
  *     <li><b>Placement</b>: what is loaded in this world, with where it is, its progress and whether it is locked; lock
  *     presets, show / hide, bring here, turn, mirror, follow BlockDesigner and unload.</li>
  *     <li><b>Resources</b>: what the selected placement still needs, against your inventory and linked chests, and
- *     AutoBuild (the server builds it from the linked chests, layer by layer).</li>
+ *     AutoBuild (the server builds it from the linked chests), with its Options screen.</li>
  *     <li><b>BlockDesigner</b>: the live link: off, waiting or connected, the linked project, Start / Stop, Get project
  *     and Send status.</li>
  * </ol>
@@ -129,7 +129,7 @@ public final class LibraryScreen extends Screen {
     private LoadedPlacement counted;
     private boolean visibleOnly;
     // AutoBuild, in the Resources step
-    private Button autoStart, autoPause, autoStop;
+    private Button autoStart, autoPause, autoStop, autoOptions;
     private String autoTip;
     /** The line next to the AutoBuild buttons and its colour, worked out each tick (not each frame). */
     private String autoLine = "";
@@ -550,6 +550,9 @@ public final class LibraryScreen extends Screen {
         }));
         autoStop = addRenderableWidget(Ui.button("Stop", "Stop AutoBuild. What it placed stays.", px + 6 + 60 + Ui.GAP, ay, 46,
                 b -> AutoBuildClient.control(counted, Message.AutoBuildAction.STOP)));
+        autoOptions = addRenderableWidget(Ui.button("Options", "AutoBuild's options: speed, order, replacing blocks in the way, "
+                + "clearing air, skipping missing items, a radius around you, only one kind of block. They change a running build too.",
+                px + 6 + 110 + Ui.GAP, ay, AUTO_OPTIONS_W, b -> minecraft.gui.setScreen(new AutoBuildScreen(this, counted))));
         updateAuto();
 
         ClientConfig c = BlockCompanionClient.config();
@@ -574,7 +577,7 @@ public final class LibraryScreen extends Screen {
         boolean on = st != null && !st.state().over();
         autoStart.visible = !on;
         autoPause.visible = autoStop.visible = on;
-        int w = px + pw - 6 - (px + 6 + 110 + 8);
+        int w = px + pw - 6 - autoLineX();
         if (on) {
             boolean paused = st.state() == io.blockcompanion.core.autobuild.AutoBuildJob.State.PAUSED;
             autoPause.setMessage(Component.literal(paused ? "Resume" : "Pause"));
@@ -590,8 +593,8 @@ public final class LibraryScreen extends Screen {
         if (st != null && !r.canStart() && !st.message().isEmpty()) {
             setAutoLine(st.message(), st.state() == io.blockcompanion.core.autobuild.AutoBuildJob.State.FINISHED ? Ui.GOOD : Ui.MUTED, w);
         } else {
-            setAutoLine(r.canStart() ? String.format(Locale.ROOT, "Ready: %,d %s, layer by layer", r.blocks(), r.blocks() == 1 ? "block" : "blocks")
-                    : r.tip(), r.canStart() ? Ui.GOOD : Ui.MUTED, w);
+            setAutoLine(r.canStart() ? String.format(Locale.ROOT, "Ready: %,d %s, %s", r.blocks(), r.blocks() == 1 ? "block" : "blocks",
+                    AutoBuildClient.effective().describe()) : r.tip(), r.canStart() ? Ui.GOOD : Ui.MUTED, w);
         }
     }
 
@@ -603,7 +606,14 @@ public final class LibraryScreen extends Screen {
     /** The AutoBuild line next to its buttons: progress while it runs, else whether it can start. */
     private void drawAuto(GuiGraphicsExtractor g) {
         if (autoStart == null) return;
-        Ui.text(g, font, autoLine, px + 6 + 110 + 8, autoStart.getY() + 6, autoLineColor);
+        Ui.text(g, font, autoLine, autoLineX(), autoStart.getY() + 6, autoLineColor);
+    }
+
+    private static final int AUTO_OPTIONS_W = 56;
+
+    /** Where the AutoBuild line starts: right of Start (or Pause and Stop) and the Options button. */
+    private int autoLineX() {
+        return px + 6 + 110 + Ui.GAP + AUTO_OPTIONS_W + 8;
     }
 
     /** The line about linked chests at the bottom of the Resources step, made again only when the chests or the tool change. */

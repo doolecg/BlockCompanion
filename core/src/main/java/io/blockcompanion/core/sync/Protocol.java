@@ -82,7 +82,11 @@ public final class Protocol {
         /** C&rarr;S pause, resume or stop an AutoBuild. */
         AUTOBUILD_CONTROL(24),
         /** S&rarr;C how an AutoBuild stands. */
-        AUTOBUILD_STATUS(25);
+        AUTOBUILD_STATUS(25),
+        /** C&rarr;S start AutoBuild on a placement with options (servers that announce {@code auto_build_options}). */
+        AUTOBUILD_BEGIN(26),
+        /** C&rarr;S change a running AutoBuild's options. */
+        AUTOBUILD_SET_OPTIONS(27);
 
         public final int id;
 
@@ -161,6 +165,8 @@ public final class Protocol {
             case AUTOBUILD_START -> Message.AutoBuildStart.read(in);
             case AUTOBUILD_CONTROL -> Message.AutoBuildControl.read(in);
             case AUTOBUILD_STATUS -> Message.AutoBuildStatus.read(in);
+            case AUTOBUILD_BEGIN -> Message.AutoBuildBegin.read(in);
+            case AUTOBUILD_SET_OPTIONS -> Message.AutoBuildSetOptions.read(in);
         };
         // A hello from a newer version may carry more after the fields we know; anything else must end exactly.
         if (type != Type.HELLO && in.remaining() != 0) throw new IOException("Trailing bytes after " + type);

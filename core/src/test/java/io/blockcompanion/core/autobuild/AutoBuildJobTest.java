@@ -26,6 +26,11 @@ class AutoBuildJobTest {
         final Set<String> unloaded = new HashSet<>();
         boolean creative, online = true, dimension = true;
         int dings;
+        /** Where the owner stands, or null (another dimension). */
+        double[] position;
+        /** What broke: "dirt@1,0,0", and what dropped (only with drops given). */
+        final List<String> broken = new ArrayList<>();
+        final List<String> dropped = new ArrayList<>();
 
         static String key(int x, int y, int z) {
             return x + "," + y + "," + z;
@@ -58,6 +63,29 @@ class AutoBuildJobTest {
             blocks.put(key(x, y, z), state);
             placed.add(state.path() + "@" + key(x, y, z));
             return true;
+        }
+
+        public Removal removal(String d, int x, int y, int z) {
+            String p = get(d, x, y, z).path();
+            if (p.equals("bedrock") || p.equals("barrier")) return Removal.NEVER;
+            if (p.equals("chest") || p.equals("torch") || p.equals("poppy") || p.endsWith("_sign")) return Removal.OTHER;
+            return Removal.SOLID;
+        }
+
+        public boolean replace(String d, int x, int y, int z, BlockState state, Drops drops) {
+            BlockState old = get(d, x, y, z);
+            broken.add(old.path() + "@" + key(x, y, z));
+            if (drops != null) {
+                dropped.add("minecraft:" + old.path());
+                if (!drops.chests().isEmpty()) drops.filled(drops.chests().get(0));
+            }
+            if (state.isAir()) blocks.remove(key(x, y, z));
+            else place(d, x, y, z, state);
+            return true;
+        }
+
+        public double[] position(UUID player, String d) {
+            return position;
         }
 
         public boolean isCreative(UUID player) {

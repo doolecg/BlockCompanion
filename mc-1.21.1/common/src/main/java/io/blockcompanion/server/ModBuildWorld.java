@@ -1,6 +1,7 @@
 package io.blockcompanion.server;
 
 import io.blockcompanion.core.autobuild.BuildWorld;
+import io.blockcompanion.core.chests.LinkedChests;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -12,11 +13,18 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
@@ -29,12 +37,22 @@ import java.util.concurrent.ConcurrentHashMap;
  * opens). Server thread only; no client classes.
  */
 final class ModBuildWorld implements BuildWorld {
+    /**
+     * How AutoBuild sets blocks, like Create's schematic cannon: clients are told, but neighbours get no block or shape
+     * updates. The schematic's states already carry their connections, and nothing next to the build reacts (water
+     * doesn't flow into a gap, observers and redstone stay quiet), which also keeps the server's work per block low.
+     */
+    private static final int PLACE_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
+
     private final MinecraftServer server;
+    /** For putting broken blocks' drops into the linked chests. */
+    private final ModChestAccess chests;
     /** Core state to game state; a missing block maps to the empty Optional. */
     private final Map<io.blockcompanion.core.model.BlockState, Optional<BlockState>> toGame = new ConcurrentHashMap<>();
 
-    ModBuildWorld(MinecraftServer server) {
+    ModBuildWorld(MinecraftServer server, ModChestAccess chests) {
         this.server = server;
+        this.chests = chests;
     }
 
     private ServerLevel level(String dimension) {
@@ -112,7 +130,61 @@ final class ModBuildWorld implements BuildWorld {
         ServerLevel level = level(dimension);
         BlockState mc = game(state);
         if (level == null || mc == null) return false;
-        return level.setBlock(new BlockPos(x, y, z), mc, Block.UPDATE_ALL);
+        return level.setBlock(new BlockPos(x, y, z), mc, PLACE_FLAGS);
+    }
+
+    @Override
+    public Removal removal(String dimension, int x, int y, int z) {
+        ServerLevel level = level(dimension);
+        if (level == null) return Removal.NEVER;
+        BlockPos pos = new BlockPos(x, y, z);
+        BlockState mc = level.getBlockState(pos);
+        // Bedrock, barriers, portals, command and structure blocks can't be broken by hand: never by AutoBuild either.
+        if (mc.isAir() || mc.getDestroySpeed(level, pos) < 0) return Removal.NEVER;
+        if (mc.hasBlockEntity()) return Removal.OTHER;
+        return mc.isCollisionShapeFullBlock(level, pos) ? Removal.SOLID : Removal.OTHER;
+    }
+
+    @Override
+    public boolean replace(String dimension, int x, int y, int z, io.blockcompanion.core.model.BlockState state, Drops drops) {
+        ServerLevel level = level(dimension);
+        BlockState mc = state.isAir() ? Blocks.AIR.defaultBlockState() : game(state);
+        if (level == null || mc == null) return false;
+        BlockPos pos = new BlockPos(x, y, z);
+        BlockState old = level.getBlockState(pos);
+        BlockEntity be = old.hasBlockEntity() ? level.getBlockEntity(pos) : null;
+        List<ItemStack> stacks = new ArrayList<>();
+        // What a container held, always (as when a player breaks it), taken out first: it isn't spilled twice, and a
+        // shulker box drops empty instead of with a copy of it...
+        if (be instanceof Container c) {
+            for (int i = 0; i < c.getContainerSize(); i++) if (!c.getItem(i).isEmpty()) stacks.add(c.getItem(i).copy());
+            c.clearContent();
+        }
+        // ...and what breaking it by hand would drop (nothing in creative).
+        if (drops != null) stacks.addAll(Block.getDrops(old, level, pos, be));
+        LinkedHashSet<LinkedChests.Pos> filled = new LinkedHashSet<>();
+        for (ItemStack st : stacks) {
+            ItemStack left = st;
+            // Into the linked chests in order (survival), the rest on the ground.
+            if (drops != null) {
+                for (LinkedChests.Pos c : drops.chests()) {
+                    if (left.isEmpty()) break;
+                    int before = left.getCount();
+                    left = chests.insert(c.dimension(), c.x(), c.y(), c.z(), left);
+                    if (left.getCount() != before) filled.add(c);
+                }
+            }
+            if (!left.isEmpty()) Block.popResource(level, pos, left);
+        }
+        if (drops != null) filled.forEach(drops::filled);
+        return level.setBlock(pos, mc, PLACE_FLAGS);
+    }
+
+    @Override
+    public double[] position(UUID player, String dimension) {
+        ServerPlayer p = server.getPlayerList().getPlayer(player);
+        if (p == null || !p.level().dimension().location().toString().equals(dimension)) return null;
+        return new double[]{p.getX(), p.getY(), p.getZ()};
     }
 
     @Override

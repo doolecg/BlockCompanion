@@ -105,7 +105,12 @@ release has one jar per loader and Minecraft version:
   beds, banners, heads, shulker boxes, bells and lecterns show their real shapes, and water and lava their real
   surface. Your resource packs (and a server's) apply to the ghosts too, and they are rebuilt when the packs change.
 - **Light on the game:** meshes are built per 16×16×16 section and rebuilt only when that part of the world or the
-  placement changes, a few sections per frame, nearest first; sections out of view are skipped.
+  placement changes, a few sections per frame, nearest first; sections out of view are skipped. Ghosts are drawn up to
+  **64 blocks** away by default (**Ghost distance** in the settings, up to 256 or unlimited); the build is still counted
+  everywhere. While AutoBuild places blocks, they arrive without sparkles, and the ghosts around them catch up a few
+  times a second rather than on every block.
+- **Two schematics on top of each other** (the same one loaded twice, say) are drawn and built twice: a line in chat
+  says so once, so you can move or unload one.
 
 ### Building
 
@@ -190,16 +195,41 @@ release has one jar per loader and Minecraft version:
   Resource Tracker. It counts items the way Resource Tracker does: a double slab
   is two slabs, a door one item, crops their seeds, wall torches torches.
 - **AutoBuild:** when your linked chests hold everything a placement still needs, **Start AutoBuild** in the
-  schematic screen's Resources step has the server build it for you: block by block, layer by layer from the bottom,
-  each block's item taken out of your chests as it goes down. Hover the button to see what is short ("Short: 12 oak
-  planks, 3 glass"). In creative it needs no chests and takes nothing. It never breaks a block: a wrong block is
-  skipped and counted, and so is anything that can't stand where it is (sand over a hole). Doors, beds and tall plants
-  go down whole, as one item. It builds only in loaded chunks, pauses when an item runs out (refill a chest and press
-  **Resume**), and shows "AutoBuild: 340 / 1,200" on the action bar and next to its **Pause** / **Resume** and
-  **Stop** buttons. When it's done you hear a bell and read "AutoBuild finished: Castle (N placed, M skipped)". It
-  runs on the server, so it needs BlockCompanion there: always in singleplayer, and the mod or the Paper plugin on a
-  server, where the owner can turn it off (`allowAutoBuild`) and decide who may use it (operators by default on a
-  dedicated server, `blockcompanion.autobuild` on Paper). The speed is a setting (5 blocks a second by default).
+  schematic screen's Resources step has the server build it for you, like Create's Schematicannon: block by block, each
+  block's item taken out of your chests as it goes down. Hover the button to see what is short ("Short: 12 oak planks,
+  3 glass"). In creative it needs no chests and takes nothing. Doors, beds and tall plants go down whole, as one item;
+  anything that can't stand where it is (sand over a hole) is skipped. Like the Schematicannon it sets blocks without
+  updating their neighbours, so water doesn't flow into a gap and redstone next to the build stays quiet while it
+  works. It builds only in loaded chunks, pauses when an
+  item runs out (refill a chest and press **Resume**), and shows "AutoBuild: 340 / 1,200" on the action bar and next to
+  its **Pause** / **Resume** and **Stop** buttons. When it's done you hear a bell and read "AutoBuild finished: Castle
+  (N placed, M skipped)". The **Options** button next to it sets how one build runs (they start from the defaults in
+  Settings, AutoBuild section, and a change reaches a build that is already running):
+  - **Speed:** blocks a second, 1 to 200 (5 by default); the server may allow less.
+  - **Order:** **Bottom up** (layer by layer from the lowest, the default), **Top down** (blocks that need support
+    below wait for one last bottom-up pass at the end), **Nearest first** (the blocks closest to you, following you as
+    you move) or **By block** (all of one kind, then the next, each bottom up).
+  - **Replace:** **Empty spots only** (the default) never breaks a block: a different block in the way is skipped and
+    counted. **Replace solid** breaks solid blocks in the way (stone, dirt, planks) to put the schematic's block there,
+    but leaves plants, torches, signs and anything holding items. **Replace all** breaks any block in the way, chests
+    too. **Replace and clear** also clears blocks standing where the schematic has air. Bedrock, barriers, portals and
+    command blocks are never broken. In survival what breaks (and what a container held) goes into your linked chests,
+    and on the ground when they are full; in creative nothing drops but a container's contents.
+  - **Ignore air** (on by default): the schematic's air is never touched. Switching it off is what clears air (it sets
+    **Replace and clear**, and picking that mode switches it off).
+  - **Skip missing** (off by default): a block your chests have no items for is skipped instead of pausing the build,
+    and AutoBuild starts even when something is short.
+  - **Radius:** only the part of the schematic within that many blocks of you (8 to 128), following you as you move;
+    the rest waits until you come near. **Whole schematic** by default.
+  - **Only build:** **Everything**, or **Block in hand**: only the blocks placed with the item you hold when it starts,
+    all of them ("build all of these").
+
+  **Use defaults** goes back to the Settings defaults, **Save as defaults** makes these the defaults. AutoBuild runs on
+  the server, so it needs BlockCompanion there: always in singleplayer, and the mod or the Paper plugin on a server,
+  where the owner can turn it off (`allowAutoBuild`), decide who may use it (operators by default on a dedicated
+  server, `blockcompanion.autobuild` on Paper), cap its speed (`autoBuildMaxBlocksPerSecond`), allow breaking blocks
+  (`autoBuildReplace`: nothing by default on a server, everything in singleplayer) and keep it within a radius of the
+  player (`autoBuildMaxRadius`). When the server allows less than you picked, it says so as the build starts.
 - **Live link to BlockDesigner:** while it runs, BlockDesigner's Resource Tracker finds the game, sends projects to it
   and follows your placements, progress and linked chests. Start and stop it on the schematic screen's BlockDesigner
   step (or the settings); **Start with the game** decides whether it starts by itself. See the
@@ -235,8 +265,8 @@ this computer; the [link protocol](docs/link-protocol.md) describes how.
 ### Settings
 
 The settings screen (its key, the schematic screen's **Settings** button, Mod Menu or NeoForge's mod list) lists its
-sections down the left: **Ghosts**, **Building**, **HUD**, **Effects**, **Colours**, **Keys**, **BlockDesigner** and
-**Updates**. Each section is one scrolling column with an option per row: its name and a short description on the left,
+sections down the left: **Ghosts**, **Building**, **AutoBuild**, **HUD**, **Effects**, **Colours**, **Keys**,
+**BlockDesigner** and **Updates**. Each section is one scrolling column with an option per row: its name and a short description on the left,
 its control on the right. A change applies at once and is saved, **Reset** puts a section back to its defaults, and the
 screen opens on the section you last used.
 
@@ -258,6 +288,7 @@ Everything is also in `config/blockcompanion.properties` (written with the defau
 | `ghost.alpha` | 0.85 | ghost opacity, 0.3 to 1 |
 | `ghost.shimmer` | true | the cool tint and slow pulse on ghosts |
 | `ghost.blockEntities` | true | chests, signs, beds, banners, heads... drawn with their real shapes |
+| `ghost.distance` | 64 | ghosts are drawn up to this many blocks away; 0 draws all of them |
 | `easyPlace.enabled` | true | easy place (also switched with **H**) |
 | `pickBlock.ghosts` | true | middle click on a ghost picks its item |
 | `hud.progress` | true | the info panel |
@@ -280,6 +311,11 @@ Everything is also in `config/blockcompanion.properties` (written with the defau
 | `tool.item` | minecraft:stick | the selection tool; empty switches it off |
 | `chests.count`, `chests.restockCount` | true, 64 | linked chests count as materials; how many easy place fetches at once |
 | `autoBuild.blocksPerSecond` | 5 | how fast AutoBuild places (the server may allow less) |
+| `autoBuild.order` | BOTTOM_UP | AutoBuild's order: `BOTTOM_UP`, `TOP_DOWN`, `NEAREST` or `BY_BLOCK` |
+| `autoBuild.replace`, `autoBuild.ignoreAir` | keep, true | what AutoBuild may break: `keep`, `solid`, `all` or `clear`; whether the schematic's air is left alone (the server may allow less) |
+| `autoBuild.skipMissing` | false | skip blocks the chests have no items for instead of pausing |
+| `autoBuild.radius` | 0 | build only within this many blocks of you (0: the whole schematic) |
+| `autoBuild.only` | all | `all`, or `held`: only the block in your hand when it starts |
 | `link.enabled` | true | the live link to BlockDesigner |
 
 ### Planned
@@ -329,7 +365,9 @@ placement maths, the layer view, comparing, item counts that match Resource Trac
 tracker (live changes, unloaded chunks, saving), the progress file (format, name, atomic write, timing), easy place's
 click planning and ghost ray, the material helper, several placements per world and their locks, linked chests
 (through the sync server too), AutoBuild (its layer order, doors and beds as one step, items per block, the chest
-check, pausing and the server's own checks), the live link (instance files, the token, projects, status) and the HUD layout.
+check, pausing and the server's own checks; the replace modes, clearing air and where drops go, the other orders,
+skipping missing items, the radius, one kind of block, options changed while it runs, the server's caps and the
+options on the wire), the live link (instance files, the token, projects, status) and the HUD layout.
 
 ## Project layout
 

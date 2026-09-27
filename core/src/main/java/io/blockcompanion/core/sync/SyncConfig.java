@@ -1,5 +1,7 @@
 package io.blockcompanion.core.sync;
 
+import io.blockcompanion.core.autobuild.AutoBuildOptions;
+
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -46,6 +48,13 @@ public final class SyncConfig {
     public boolean allowAutoBuild = true;
     /** The fastest AutoBuild may place, in blocks per second (players pick their speed up to this). */
     public int autoBuildMaxRate = 20;
+    /**
+     * The most AutoBuild may break: keep (never), solid, all, or clear (also where the schematic has air). Defaults to
+     * keep on a dedicated server and clear in singleplayer and on LAN.
+     */
+    public AutoBuildOptions.Replace autoBuildReplace = AutoBuildOptions.Replace.KEEP;
+    /** AutoBuild only builds within this many blocks of the player; 0: no limit (the whole schematic may be built). */
+    public int autoBuildMaxRadius = 0;
     public final Map<Permission, Access> access = new EnumMap<>(Permission.class);
 
     public SyncConfig() {
@@ -67,11 +76,13 @@ public final class SyncConfig {
 
     /**
      * Reads the config; on a {@code dedicated} server AutoBuild defaults to operators only (it places blocks anywhere
-     * in loaded chunks without the player walking there), in singleplayer and on LAN to everyone.
+     * in loaded chunks without the player walking there) and never breaking blocks, in singleplayer and on LAN to
+     * everyone with every replace mode.
      */
     public static SyncConfig load(Path file, boolean dedicated) {
         SyncConfig c = new SyncConfig();
         if (dedicated) c.access.put(Permission.AUTOBUILD, Access.OP);
+        else c.autoBuildReplace = AutoBuildOptions.Replace.CLEAR;
         Properties p = new Properties();
         if (Files.isRegularFile(file)) {
             try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
@@ -107,6 +118,8 @@ public final class SyncConfig {
         allowEasyPlaceAuto = bool(p, "allowEasyPlaceAuto", allowEasyPlaceAuto);
         allowAutoBuild = bool(p, "allowAutoBuild", allowAutoBuild);
         autoBuildMaxRate = (int) Math.max(1, Math.min(1000, num(p, "autoBuildMaxBlocksPerSecond", autoBuildMaxRate)));
+        autoBuildReplace = AutoBuildOptions.Replace.parse(p.getProperty("autoBuildReplace"), autoBuildReplace);
+        autoBuildMaxRadius = (int) Math.max(0, Math.min(AutoBuildOptions.MAX_RADIUS, num(p, "autoBuildMaxRadius", autoBuildMaxRadius)));
         for (Permission perm : Permission.values()) {
             String key = "permission." + perm.name().toLowerCase(Locale.ROOT);
             String v = p.getProperty(key);
@@ -138,6 +151,8 @@ public final class SyncConfig {
         p.setProperty("allowEasyPlaceAuto", Boolean.toString(allowEasyPlaceAuto));
         p.setProperty("allowAutoBuild", Boolean.toString(allowAutoBuild));
         p.setProperty("autoBuildMaxBlocksPerSecond", Integer.toString(autoBuildMaxRate));
+        p.setProperty("autoBuildReplace", autoBuildReplace.key());
+        p.setProperty("autoBuildMaxRadius", Integer.toString(autoBuildMaxRadius));
         for (Permission perm : Permission.values()) {
             p.setProperty("permission." + perm.name().toLowerCase(Locale.ROOT), access.get(perm).name().toLowerCase(Locale.ROOT));
         }
@@ -154,7 +169,10 @@ public final class SyncConfig {
                      allowAutoPlace, autoPlace*, allowCreativeFill, allowChestBuild, allowEasyPlace and
                      allowEasyPlaceAuto are announced to clients for the building helpers.
                      allowAutoBuild switches AutoBuild (the server builds a placement from linked chests) on or off;
-                     permission.autobuild (blockcompanion.autobuild on Paper) says who may start it.""");
+                     permission.autobuild (blockcompanion.autobuild on Paper) says who may start it.
+                     autoBuildReplace is the most AutoBuild may break: keep (never), solid (solid blocks in the way),
+                     all (any block in the way, chests too) or clear (also blocks where the schematic has air).
+                     autoBuildMaxRadius above 0 makes AutoBuild build only that near the player (0: no limit).""");
         }
     }
 

@@ -561,4 +561,77 @@ public sealed interface Message {
             return new AutoBuildStatus(job, hash, pose, name, states[st], in.varLong(), in.varLong(), in.varLong(), in.varLong(), in.string());
         }
     }
+
+    /**
+     * AutoBuild's options on the wire: named numbers, then named texts. A side skips keys it doesn't know, and a key
+     * that is missing reads as its default, so either side can add options without breaking the other.
+     */
+    static void writeOptions(Wire.Out out, io.blockcompanion.core.autobuild.AutoBuildOptions o) {
+        java.util.Map<String, Long> numbers = o.toMap();
+        out.varInt(numbers.size());
+        numbers.forEach((k, v) -> out.string(k).i64(v));
+        java.util.Map<String, String> text = o.toText();
+        out.varInt(text.size());
+        text.forEach((k, v) -> out.string(k).string(v));
+    }
+
+    static io.blockcompanion.core.autobuild.AutoBuildOptions readOptions(Wire.In in) throws IOException {
+        int n = in.count();
+        java.util.Map<String, Long> numbers = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < n; i++) numbers.put(in.string(), in.i64());
+        int t = in.count();
+        java.util.Map<String, String> text = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < t; i++) text.put(in.string(), in.string());
+        return io.blockcompanion.core.autobuild.AutoBuildOptions.fromMaps(numbers, text);
+    }
+
+    /**
+     * Client to server: build this placement from the linked chests with these options (speed, replace mode, order,
+     * air, missing items, radius, one kind of block). As {@link AutoBuildStart}, which older servers take; a client
+     * sends this one only to servers that announce {@code auto_build_options}. The server caps the options itself.
+     */
+    record AutoBuildBegin(String hash, PlacementPose pose, io.blockcompanion.core.autobuild.AutoBuildOptions options,
+                          List<io.blockcompanion.core.chests.LinkedChests.Pos> chests) implements Message {
+        public AutoBuildBegin {
+            chests = List.copyOf(chests);
+        }
+
+        public Protocol.Type type() {
+            return Protocol.Type.AUTOBUILD_BEGIN;
+        }
+
+        public void writeBody(Wire.Out out) {
+            out.hash(hash);
+            pose.write(out);
+            writeOptions(out, options);
+            out.varInt(chests.size());
+            for (var c : chests) out.string(c.dimension()).i32(c.x()).i32(c.y()).i32(c.z());
+        }
+
+        static AutoBuildBegin read(Wire.In in) throws IOException {
+            String hash = in.hash();
+            PlacementPose pose = PlacementPose.read(in);
+            var options = readOptions(in);
+            int n = in.count();
+            List<io.blockcompanion.core.chests.LinkedChests.Pos> chests = new ArrayList<>(n);
+            for (int i = 0; i < n; i++) chests.add(new io.blockcompanion.core.chests.LinkedChests.Pos(in.string(), in.i32(), in.i32(), in.i32()));
+            return new AutoBuildBegin(hash, pose, options, chests);
+        }
+    }
+
+    /** Client to server: new options for one of the player's running AutoBuilds (the server caps them again). */
+    record AutoBuildSetOptions(UUID job, io.blockcompanion.core.autobuild.AutoBuildOptions options) implements Message {
+        public Protocol.Type type() {
+            return Protocol.Type.AUTOBUILD_SET_OPTIONS;
+        }
+
+        public void writeBody(Wire.Out out) {
+            out.uuid(job);
+            writeOptions(out, options);
+        }
+
+        static AutoBuildSetOptions read(Wire.In in) throws IOException {
+            return new AutoBuildSetOptions(in.uuid(), readOptions(in));
+        }
+    }
 }

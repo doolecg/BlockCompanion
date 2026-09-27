@@ -80,7 +80,7 @@ public final class SyncClient {
 
     /** The player's AutoBuilds as the server last reported them, by job id, and starts waiting for their upload. */
     private final Map<UUID, Message.AutoBuildStatus> autoBuilds = new LinkedHashMap<>();
-    private final Map<String, Message.AutoBuildStart> autoBuildsWaiting = new HashMap<>();
+    private final Map<String, Message> autoBuildsWaiting = new HashMap<>();
 
     // The link between the player's placement and a shared one.
     private UUID linked;
@@ -193,15 +193,32 @@ public final class SyncClient {
      * from {@code chests}. Returns false (after telling the player) when it can't even ask.
      */
     public boolean startAutoBuild(String libraryName, PlacementPose pose, int blocksPerSecond, List<LinkedChests.Pos> chests) {
+        return startAutoBuild(libraryName, pose, io.blockcompanion.core.autobuild.AutoBuildOptions.ofRate(blocksPerSecond), chests);
+    }
+
+    /**
+     * Starts AutoBuild with options (speed, replace mode, order, radius...). A server that doesn't take options
+     * ({@link Features#autoBuildOptions}) gets the speed only and builds the 0.3.0 way.
+     */
+    public boolean startAutoBuild(String libraryName, PlacementPose pose, io.blockcompanion.core.autobuild.AutoBuildOptions options,
+                                  List<LinkedChests.Pos> chests) {
         if (!autoBuildAllowed()) {
             listener.notice(true, "This server doesn't let you use AutoBuild");
             return false;
         }
         String hash = upload(libraryName);
         if (hash == null) return false;
-        Message.AutoBuildStart start = new Message.AutoBuildStart(hash, pose, blocksPerSecond, chests);
+        Message start = features.autoBuildOptions() ? new Message.AutoBuildBegin(hash, pose, options, chests)
+                : new Message.AutoBuildStart(hash, pose, options.blocksPerSecond(), chests);
         if (schematics.containsKey(hash)) send(start);
         else autoBuildsWaiting.put(hash, start);
+        return true;
+    }
+
+    /** New options for one of the player's running AutoBuilds; false when this server doesn't take options. */
+    public boolean setAutoBuildOptions(UUID job, io.blockcompanion.core.autobuild.AutoBuildOptions options) {
+        if (!serverPresent || !features.autoBuildOptions()) return false;
+        send(new Message.AutoBuildSetOptions(job, options));
         return true;
     }
 
@@ -219,7 +236,10 @@ public final class SyncClient {
 
     /** True while an AutoBuild start for the placement at {@code pose} waits for its upload. */
     public boolean autoBuildStarting(PlacementPose pose) {
-        for (Message.AutoBuildStart st : autoBuildsWaiting.values()) if (st.pose().equals(pose)) return true;
+        for (Message st : autoBuildsWaiting.values()) {
+            PlacementPose p = st instanceof Message.AutoBuildBegin b ? b.pose() : ((Message.AutoBuildStart) st).pose();
+            if (p.equals(pose)) return true;
+        }
         return false;
     }
 
@@ -565,7 +585,7 @@ public final class SyncClient {
                 if (s.code() == Message.UploadCode.DONE) listener.notice(false, s.message());
                 ClientPlacementModel.Loaded cur = model.current();
                 if (sharesWaiting.remove(u.hash) != null && cur != null) create(u.hash, cur.pose());
-                Message.AutoBuildStart start = autoBuildsWaiting.remove(u.hash);
+                Message start = autoBuildsWaiting.remove(u.hash);
                 if (start != null) send(start);
             }
             case HASH_MISMATCH -> {

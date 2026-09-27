@@ -73,7 +73,7 @@ public final class ModSyncServer {
         sync = new SyncServer(store, config, software, System::currentTimeMillis, SYNC_LOG);
         chests = new ModChestAccess(s);
         sync.setChestAccess(chests, new ChestLinkStore(root.resolve("chests.json")));
-        sync.setBuildWorld(new ModBuildWorld(s));
+        sync.setBuildWorld(new ModBuildWorld(s, chests));
         LOG.info("BlockCompanion shared space ready on {} (protocol {}): {} schematics, {} placements in {}", Protocol.CHANNEL,
                 Protocol.VERSION, store.schematics().size(), store.placements().size(), root);
         if (s.isDedicatedServer()) {

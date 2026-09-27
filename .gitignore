@@ -49,3 +49,6 @@ __pycache__/
 
 # CurseForge upload pack (local only)
 curseforge-pack/
+
+# Architectury transformer logs
+.architectury-transformer/

@@ -110,6 +110,14 @@ public final class GhostRenderer {
     private final Map<Long, SectionMesh> meshes = new HashMap<>();
     private Set<Long> sections = Set.of();
     private final Set<Long> dirty = ConcurrentHashMap.newKeySet();
+    /**
+     * When each section was last meshed, and the earliest a stale one may be meshed again. The game re-marks every
+     * section around a changed block while light settles (up to 27 per block), which AutoBuild does several times a
+     * second: those wait {@link #WORLD_GAP_MS} after the section's last mesh, and a section whose own cells changed
+     * waits only {@link #CELL_GAP_MS}, so a steady stream of changes is meshed a few times a second, not per block.
+     */
+    private final Map<Long, Long> builtAt = new ConcurrentHashMap<>(), notBefore = new ConcurrentHashMap<>();
+    private static final long WORLD_GAP_MS = 2000, CELL_GAP_MS = 150;
     private Placement placement;
     private long placementVersion = -1, layersVersion = -1;
     private Box box;
@@ -126,12 +134,27 @@ public final class GhostRenderer {
     public void onWorldSectionDirty(int sx, int sy, int sz) {
         if (placement == null) return;
         long k = key(sx, sy, sz);
-        if (sections.contains(k)) dirty.add(k);
+        if (sections.contains(k)) defer(k, WORLD_GAP_MS);
+    }
+
+    /** A block inside the placement changed: its section is meshed again shortly. */
+    public void onCellChanged(int x, int y, int z) {
+        if (placement == null) return;
+        long k = key(x >> 4, y >> 4, z >> 4);
+        if (sections.contains(k)) defer(k, CELL_GAP_MS);
+    }
+
+    private void defer(long k, long gapMs) {
+        Long built = builtAt.get(k);
+        notBefore.merge(k, built == null ? 0L : built + gapMs, Math::min);
+        dirty.add(k);
     }
 
     public void clear() {
         meshes.clear();
         dirty.clear();
+        builtAt.clear();
+        notBefore.clear();
         sections = Set.of();
         placement = null;
         placementVersion = layersVersion = -1;
@@ -141,6 +164,7 @@ public final class GhostRenderer {
     }
 
     public void invalidate() {
+        notBefore.clear();
         dirty.addAll(sections);
     }
 
@@ -184,10 +208,12 @@ public final class GhostRenderer {
                     for (int sz = box.minZ() >> 4; sz <= box.maxZ() >> 4; sz++) now.add(key(sx, sy, sz));
             meshes.keySet().retainAll(now);
             sections = now;
+            notBefore.clear();
             dirty.addAll(now);
         }
         if (layers.version() != layersVersion) {
             layersVersion = layers.version();
+            notBefore.clear();
             dirty.addAll(sections);
         }
     }
@@ -208,6 +234,7 @@ public final class GhostRenderer {
         for (var e : meshes.entrySet()) {
             io.blockcompanion.core.model.BlockPos s = io.blockcompanion.core.model.BlockPos.unpack(e.getKey());
             double x = s.x() << 4, y = s.y() << 4, z = s.z() << 4;
+            if (tooFar(e.getKey(), cam)) continue;
             if (frustum == null || frustum.isVisible(new AABB(x, y, z, x + 16, y + 16, z + 16))) visible.add(e);
         }
         visible.sort((a, b) -> Double.compare(sectionDist2(b.getKey(), cam), sectionDist2(a.getKey(), cam)));
@@ -265,6 +292,12 @@ public final class GhostRenderer {
     static float shimmer() {
         double t = (System.currentTimeMillis() % 2600L) / 2600.0;
         return (float) (0.95 + 0.05 * Math.sin(t * Math.PI * 2));
+    }
+
+    /** Whether a section lies beyond the ghost distance (measured to its centre, with half a section to spare). */
+    private static boolean tooFar(long key, Vec3 cam) {
+        int d = BlockCompanionClient.config().ghostDistance;
+        return d > 0 && sectionDist2(key, cam) > (d + 8.0) * (d + 8.0);
     }
 
     private static double sectionDist2(long key, Vec3 cam) {
@@ -376,10 +409,16 @@ public final class GhostRenderer {
         List<Long> order = new ArrayList<>(dirty);
         int camX = (int) Math.floor(cam.x) >> 4, camY = (int) Math.floor(cam.y) >> 4, camZ = (int) Math.floor(cam.z) >> 4;
         order.sort((a, b) -> Long.compare(dist(a, camX, camY, camZ), dist(b, camX, camY, camZ)));
-        long start = System.nanoTime();
+        long start = System.nanoTime(), now = System.currentTimeMillis();
         for (long k : order) {
+            // Far sections stay stale until the player comes near: no work for what isn't drawn.
+            if (tooFar(k, cam)) continue;
+            Long due = notBefore.get(k);
+            if (due != null && due > now) continue;
             dirty.remove(k);
+            notBefore.remove(k);
             if (!sections.contains(k)) continue;
+            builtAt.put(k, now);
             try {
                 build(level, layers, k);
             } catch (RuntimeException ex) {

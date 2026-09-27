@@ -1,3 +1,37 @@
+# BlockCompanion 0.4.0
+
+AutoBuild gets options like Create's Schematicannon: speed, order, what it may replace, a radius around you and one
+block type at a time. Building with it is also much lighter on your frame rate. For Minecraft 1.21.1, 26.2 and 26.3 on
+Fabric and NeoForge, and the Paper plugin.
+
+## New
+- **AutoBuild options:** an **Options** button next to **Start AutoBuild** (also while a build runs) and an
+  **AutoBuild** section in the settings for the defaults:
+  - **Speed:** 1 to 200 blocks a second (5 by default).
+  - **Order:** bottom up (as before), top down (sand, torches and anything else that needs support go last), nearest to
+    you first, or one block type at a time.
+  - **Replace:** keep what is there (as before), replace solid blocks, replace everything, or also clear blocks where
+    the schematic has air. Bedrock, barriers and portals are never touched. In survival, what comes out goes into your
+    linked chests, and onto the ground when they are full.
+  - **Ignore air** (on by default) and **Skip missing**: go past blocks you have no items for instead of pausing.
+  - **Radius:** build only what is within 8 to 128 blocks of you, following you as you move.
+  - **Only build:** everything, or only the blocks that match the item in your hand.
+  - Changes reach a build that is already running: speed at once, the rest re-plans what is left.
+- **Server limits:** server owners can cap the speed, the radius and what AutoBuild may break (`autoBuildReplace`,
+  `autoBuildMaxRadius`). Breaking blocks is off on servers until the owner allows it; singleplayer allows everything.
+- **Ghost distance** (Settings, Ghosts): ghosts are drawn up to 64 blocks away by default, up to 256 or unlimited. Big
+  schematics stay smooth; the build is still counted everywhere.
+- **Overlap warning:** two schematics on top of each other (the same one loaded twice, say) are drawn and built twice.
+  A line in chat now says so once, so you can move or unload one.
+
+## Changed
+- **Smoother AutoBuild:** its blocks go down without sparkles, and the ghosts and the build count around them catch up
+  a few times a second instead of on every block, which kept the frame rate low while it ran.
+- **AutoBuild places like the Schematicannon:** without updating the blocks next to it, so water doesn't flow into a
+  gap and redstone beside the build stays quiet while it works. It is lighter on the server too.
+
+---
+
 # BlockCompanion 0.3.2
 
 BlockCompanion now runs on NeoForge for Minecraft 26.2 too. For Minecraft 1.21.1, 26.2 and 26.3 on Fabric and NeoForge,

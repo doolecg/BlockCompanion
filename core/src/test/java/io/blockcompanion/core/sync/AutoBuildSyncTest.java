@@ -1,6 +1,7 @@
 package io.blockcompanion.core.sync;
 
 import io.blockcompanion.core.autobuild.AutoBuildJob;
+import io.blockcompanion.core.autobuild.AutoBuildOptions;
 import io.blockcompanion.core.autobuild.BuildWorld;
 import io.blockcompanion.core.chests.LinkedChests;
 import io.blockcompanion.core.formats.SchematicFile;
@@ -69,6 +70,25 @@ class AutoBuildSyncTest {
             return true;
         }
 
+        public Removal removal(String dimension, int x, int y, int z) {
+            return get(dimension, x, y, z).path().equals("bedrock") ? Removal.NEVER : Removal.SOLID;
+        }
+
+        /** Breaks the block: its item goes into the first linked chest (the fake chests have room for anything). */
+        public boolean replace(String dimension, int x, int y, int z, BlockState state, Drops drops) {
+            BlockState old = get(dimension, x, y, z);
+            if (drops != null && !drops.chests().isEmpty()) {
+                LinkedChests.Pos c = drops.chests().get(0);
+                chestsWorld.containers.get(ChestSyncTest.FakeWorld.key(c.dimension(), c.x(), c.y(), c.z())).merge(old.name(), 1L, Long::sum);
+                drops.filled(c);
+            }
+            if (state.isAir()) set.remove(x + "," + y + "," + z);
+            else place(dimension, x, y, z, state);
+            return true;
+        }
+
+        ChestSyncTest.FakeWorld chestsWorld;
+
         public boolean isCreative(UUID player) {
             return creative.contains(player);
         }
@@ -107,6 +127,7 @@ class AutoBuildSyncTest {
         store.load();
         SyncServer s = new SyncServer(store, config, "test", now::get, SyncLog.NONE);
         s.setChestAccess(chests, new ChestLinkStore(dir.resolve("world").resolve("chests.json")));
+        blocks.chestsWorld = chests;
         if (canBuild) s.setBuildWorld(blocks);
         return s;
     }
@@ -273,5 +294,119 @@ class AutoBuildSyncTest {
         assertThat(alice.last(Message.Notice.class).message()).startsWith("AutoBuild paused: Out of oak door");
         assertThat(alice.last(Message.AutoBuildStatus.class).state()).isEqualTo(AutoBuildJob.State.PAUSED);
         assertThat(blocks.set).hasSize(2);
+    }
+
+    // ---- options ----------------------------------------------------------------------------------------------------
+
+    static AutoBuildOptions options() {
+        return AutoBuildOptions.DEFAULT.withRate(20);
+    }
+
+    @Test
+    void theServerAnnouncesItsLimitsAndSingleplayerAllowsBreaking(@TempDir Path cfg) {
+        Features f = alice.last(Message.ServerFeatures.class).features();
+        assertThat(f.autoBuildOptions()).isTrue();
+        assertThat(f.autoBuildReplace()).isEqualTo(AutoBuildOptions.Replace.KEEP);
+        assertThat(f.autoBuildMaxRadius()).isZero();
+
+        assertThat(SyncConfig.load(cfg.resolve("a.properties"), false).autoBuildReplace).isEqualTo(AutoBuildOptions.Replace.CLEAR);
+        SyncConfig dedicated = SyncConfig.load(cfg.resolve("b.properties"), true);
+        assertThat(dedicated.autoBuildReplace).isEqualTo(AutoBuildOptions.Replace.KEEP);
+        assertThat(dedicated.autoBuildMaxRadius).isZero();
+    }
+
+    @Test
+    void theConfigKeysAreReadAndWritten(@TempDir Path cfg) throws IOException {
+        Path file = cfg.resolve("c.properties");
+        Files.writeString(file, "autoBuildReplace=solid\nautoBuildMaxRadius=48\nautoBuildMaxBlocksPerSecond=50\n");
+        SyncConfig c = SyncConfig.load(file, true);
+        assertThat(c.autoBuildReplace).isEqualTo(AutoBuildOptions.Replace.SOLID);
+        assertThat(c.autoBuildMaxRadius).isEqualTo(48);
+        assertThat(c.autoBuildMaxRate).isEqualTo(50);
+        assertThat(Files.readString(file)).contains("autoBuildReplace=solid").contains("autoBuildMaxRadius=48");
+    }
+
+    @Test
+    void optionsAreCappedByTheServerAndItSaysSo() {
+        LinkedChests.Pos c = linkChest(1, Map.of("minecraft:stone", 10L, "minecraft:oak_door", 3L));
+        send(alice, new Message.AutoBuildBegin(hash, POSE, options().withRate(500).withReplace(AutoBuildOptions.Replace.ALL)
+                .withOrder(AutoBuildOptions.Order.TOP_DOWN), List.of(c)));
+        List<Message.Notice> notices = alice.all(Message.Notice.class);
+        assertThat(notices.get(notices.size() - 2).message()).isEqualTo("AutoBuild started: Tower (3 blocks, 20 per second, top down)");
+        assertThat(notices.get(notices.size() - 1).message()).isEqualTo("This server allows less: at most 20 blocks per second, no breaking blocks");
+        tick(20);
+        assertThat(alice.last(Message.AutoBuildStatus.class).state()).isEqualTo(AutoBuildJob.State.FINISHED);
+        assertThat(blocks.set).hasSize(4);
+    }
+
+    @Test
+    void replacingPutsWhatBrokeInTheLinkedChests() throws IOException {
+        SyncConfig config = new SyncConfig();
+        config.autoBuildReplace = AutoBuildOptions.Replace.SOLID;
+        server = newServer(config, true);
+        send(alice, new Message.Hello(Protocol.VERSION, "client", 0));
+        blocks.set.put("10,64,20", BlockState.of("minecraft:dirt"));
+        LinkedChests.Pos c = linkChest(1, Map.of("minecraft:stone", 10L, "minecraft:oak_door", 3L));
+
+        // Never breaking, the dirt is left: two blocks to place.
+        send(alice, new Message.AutoBuildBegin(hash, POSE, options(), List.of(c)));
+        assertThat(alice.last(Message.Notice.class).message()).isEqualTo("AutoBuild started: Tower (2 blocks, 20 per second)");
+        UUID job = alice.last(Message.AutoBuildStatus.class).job();
+        send(alice, new Message.AutoBuildControl(job, Message.AutoBuildAction.STOP));
+
+        send(alice, new Message.AutoBuildBegin(hash, POSE, options().withReplace(AutoBuildOptions.Replace.SOLID), List.of(c)));
+        assertThat(alice.last(Message.Notice.class).message()).isEqualTo("AutoBuild started: Tower (3 blocks, 20 per second, replace solid)");
+        tick(40);
+        assertThat(blocks.get(DIM, 10, 64, 20).path()).isEqualTo("stone");
+        assertThat(alice.last(Message.Notice.class).message()).isEqualTo("AutoBuild finished: Tower (3 placed, 0 skipped, 1 removed)");
+        // The dirt is in the chest, and the server knows it (the list the player gets says so).
+        assertThat(chests.containers.get(ChestSyncTest.FakeWorld.key(DIM, 1, 64, 0))).containsEntry("minecraft:dirt", 1L);
+        tick(SyncServer.CHEST_REFRESH_TICKS);
+        assertThat(alice.last(Message.ChestContents.class).entries()).singleElement()
+                .satisfies(e -> assertThat(e.items()).containsEntry("minecraft:dirt", 1L));
+    }
+
+    @Test
+    void optionsChangeWhileItRuns() {
+        LinkedChests.Pos c = linkChest(1, Map.of("minecraft:stone", 10L, "minecraft:oak_door", 3L));
+        send(alice, new Message.AutoBuildBegin(hash, POSE, options().withRate(1), List.of(c)));
+        UUID job = alice.last(Message.AutoBuildStatus.class).job();
+        tick(25);
+        assertThat(blocks.set).hasSize(1);
+        send(alice, new Message.AutoBuildSetOptions(job, options().withRate(20)));
+        assertThat(alice.last(Message.Notice.class).message()).isEqualTo("AutoBuild: 20 per second");
+        tick(10);
+        assertThat(alice.last(Message.AutoBuildStatus.class).state()).isEqualTo(AutoBuildJob.State.FINISHED);
+    }
+
+    @Test
+    void onlyTheOwnerChangesTheOptions() {
+        LinkedChests.Pos c = linkChest(1, Map.of("minecraft:stone", 10L, "minecraft:oak_door", 3L));
+        send(alice, new Message.AutoBuildBegin(hash, POSE, options().withRate(1), List.of(c)));
+        UUID job = alice.last(Message.AutoBuildStatus.class).job();
+        SyncServerTest.FakePeer bob = new SyncServerTest.FakePeer("Bob", BUILDER);
+        server.receive(bob, Protocol.encode(new Message.Hello(Protocol.VERSION, "client", 0)));
+        server.receive(bob, Protocol.encode(new Message.AutoBuildSetOptions(job, options())));
+        assertThat(bob.all(Message.Notice.class)).isEmpty();
+        tick(25);
+        assertThat(blocks.set).hasSize(1);
+    }
+
+    @Test
+    void skipMissingStartsWithoutEverythingAndSkipsWhatIsShort() {
+        LinkedChests.Pos c = linkChest(1, Map.of("minecraft:stone", 2L));
+        send(alice, new Message.AutoBuildBegin(hash, POSE, options().withSkipMissing(true), List.of(c)));
+        tick(20);
+        assertThat(blocks.set).hasSize(2);
+        assertThat(alice.last(Message.Notice.class).message()).isEqualTo("AutoBuild finished: Tower (2 placed, 1 skipped)");
+    }
+
+    @Test
+    void onlyOneKindOfBlock() {
+        LinkedChests.Pos c = linkChest(1, Map.of("minecraft:oak_door", 1L));
+        send(alice, new Message.AutoBuildBegin(hash, POSE, options().withOnlyItem("minecraft:oak_door"), List.of(c)));
+        assertThat(alice.last(Message.Notice.class).message()).isEqualTo("AutoBuild started: Tower (1 block, 20 per second, only oak door)");
+        tick(20);
+        assertThat(blocks.set).containsOnlyKeys("10,65,20", "10,66,20");
     }
 }

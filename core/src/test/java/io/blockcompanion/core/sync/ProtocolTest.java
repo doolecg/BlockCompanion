@@ -1,5 +1,6 @@
 package io.blockcompanion.core.sync;
 
+import io.blockcompanion.core.autobuild.AutoBuildOptions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -16,6 +17,9 @@ class ProtocolTest {
     static final String HASH = Hashes.sha256("hello".getBytes());
     static final UUID A = UUID.fromString("00000000-0000-0000-0000-00000000000a");
     static final UUID B = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+
+    static final AutoBuildOptions OPTIONS = new AutoBuildOptions(40, AutoBuildOptions.Replace.CLEAR, AutoBuildOptions.Order.NEAREST, false,
+            true, 24, "minecraft:oak_planks");
 
     static SharedPlacement placement() {
         return new SharedPlacement(UUID.randomUUID(), HASH, "Pinecrest Watchtower.litematic", "minecraft:overworld", -120, 64, 3_000_001,
@@ -68,7 +72,9 @@ class ProtocolTest {
                 new Message.AutoBuildStart(HASH, pose, 5, List.of(new io.blockcompanion.core.chests.LinkedChests.Pos("minecraft:overworld", -3, 64, 12))),
                 new Message.AutoBuildControl(A, Message.AutoBuildAction.RESUME),
                 new Message.AutoBuildStatus(B, HASH, pose, "Castle", io.blockcompanion.core.autobuild.AutoBuildJob.State.PAUSED, 340, 1200, 300,
-                        40, "Out of glass"));
+                        40, "Out of glass"),
+                new Message.AutoBuildBegin(HASH, pose, OPTIONS, List.of(new io.blockcompanion.core.chests.LinkedChests.Pos("minecraft:overworld", -3, 64, 12))),
+                new Message.AutoBuildSetOptions(A, OPTIONS.withOnlyItem("")));
         for (Message m : all) assertThat(roundTrip(m)).as(m.type().name()).isEqualTo(m);
         // Every type but CHUNK (byte[] has no value equality) is covered above.
         assertThat(all.stream().map(Message::type).distinct().count()).isEqualTo(Protocol.Type.values().length - 1);
@@ -124,6 +130,44 @@ class ProtocolTest {
         // Auto mode never outlives easy place itself.
         assertThat(new Features(true, 0, 0, 0, Protocol.CHUNK_SIZE, 0, false, 0, 0, false, false, false, true).easyPlaceAutoAllowed())
                 .isFalse();
+    }
+
+    @Test
+    void autoBuildOptionsSkipUnknownKeysAndDefaultMissingOnes() throws IOException {
+        Wire.Out out = new Wire.Out();
+        out.varInt(Protocol.VERSION).varInt(Protocol.Type.AUTOBUILD_SET_OPTIONS.id).uuid(A);
+        out.varInt(3).string("rate").i64(12).string("from_the_future").i64(9).string("order").i64(1);
+        out.varInt(1).string("some_text_later").string("hi");
+        AutoBuildOptions o = ((Message.AutoBuildSetOptions) Protocol.decode(out.toByteArray())).options();
+        assertThat(o.blocksPerSecond()).isEqualTo(12);
+        assertThat(o.order()).isEqualTo(AutoBuildOptions.Order.TOP_DOWN);
+        // Missing keys read as the defaults: never breaking, air ignored, pausing on missing items, whole schematic.
+        assertThat(o.replace()).isEqualTo(AutoBuildOptions.Replace.KEEP);
+        assertThat(o.ignoreAir()).isTrue();
+        assertThat(o.skipMissing()).isFalse();
+        assertThat(o.radius()).isZero();
+        assertThat(o.onlyItem()).isEmpty();
+    }
+
+    @Test
+    void autoBuildFeaturesDefaultToNothingFromOlderServers() throws IOException {
+        Wire.Out out = new Wire.Out();
+        out.varInt(Protocol.VERSION).varInt(Protocol.Type.FEATURES.id).varInt(2);
+        out.string("auto_build").i64(1).string("auto_build_rate").i64(20);
+        Features f = ((Message.ServerFeatures) Protocol.decode(out.toByteArray())).features();
+        assertThat(f.autoBuildAllowed()).isTrue();
+        assertThat(f.autoBuildOptions()).isFalse();
+        assertThat(f.autoBuildReplace()).isEqualTo(AutoBuildOptions.Replace.KEEP);
+        assertThat(f.autoBuildMaxRadius()).isZero();
+        // Such a server only takes the speed.
+        assertThat(f.cap(OPTIONS)).isEqualTo(AutoBuildOptions.ofRate(20));
+
+        Features now = new Features(true, 0, 0, 0, Protocol.CHUNK_SIZE, 0, false, 0, 0, false, true, true, true, true, 100, true,
+                AutoBuildOptions.Replace.SOLID, 32);
+        Features back = ((Message.ServerFeatures) roundTrip(new Message.ServerFeatures(now))).features();
+        assertThat(back).isEqualTo(now);
+        assertThat(back.cap(OPTIONS)).isEqualTo(OPTIONS.withReplace(AutoBuildOptions.Replace.SOLID).withRadius(24));
+        assertThat(back.cap(OPTIONS.withRadius(0))).isEqualTo(OPTIONS.withReplace(AutoBuildOptions.Replace.SOLID).withRadius(32));
     }
 
     @Test

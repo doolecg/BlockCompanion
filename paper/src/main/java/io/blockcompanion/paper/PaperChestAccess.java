@@ -136,4 +136,15 @@ final class PaperChestAccess implements ChestAccess {
         }
         return removed;
     }
+
+    /**
+     * Puts a stack into the container at the position (filling matching stacks, then empty slots); returns what didn't
+     * fit, or null when all of it went in. For AutoBuild's drops.
+     */
+    static ItemStack insert(String dimension, int x, int y, int z, ItemStack stack) {
+        Inventory inv = inventory(dimension, x, y, z);
+        if (inv == null) return stack;
+        var left = inv.addItem(stack.clone());
+        return left.isEmpty() ? null : left.values().iterator().next();
+    }
 }

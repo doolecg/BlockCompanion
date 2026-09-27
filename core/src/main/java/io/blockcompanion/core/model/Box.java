@@ -47,6 +47,14 @@ public record Box(int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
         return x >= minX && x <= maxX && y >= minY && y <= maxY && z >= minZ && z <= maxZ;
     }
 
+    /** How many cells this box shares with {@code o} (0 when they don't touch). */
+    public long overlap(Box o) {
+        long x = Math.min(maxX, o.maxX) - Math.max(minX, o.minX) + 1;
+        long y = Math.min(maxY, o.maxY) - Math.max(minY, o.minY) + 1;
+        long z = Math.min(maxZ, o.maxZ) - Math.max(minZ, o.minZ) + 1;
+        return x <= 0 || y <= 0 || z <= 0 ? 0 : x * y * z;
+    }
+
     public Box union(Box o) {
         return new Box(Math.min(minX, o.minX), Math.min(minY, o.minY), Math.min(minZ, o.minZ),
                 Math.max(maxX, o.maxX), Math.max(maxY, o.maxY), Math.max(maxZ, o.maxZ));
