@@ -7,7 +7,6 @@ import io.blockcompanion.client.Keys;
 import io.blockcompanion.client.Updates;
 import io.blockcompanion.core.hud.Palette;
 import io.blockcompanion.core.update.Updater;
-import io.blockcompanion.network.SyncKeys;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -25,7 +24,6 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Every BlockCompanion setting, in sections listed down the left (or picked from a button on small screens). Each
@@ -199,28 +197,33 @@ public final class SettingsScreen extends Screen {
             case BUILDING -> {
                 c.easyPlace = d.easyPlace;
                 c.easyPlaceAutoPick = d.easyPlaceAutoPick;
+                c.easyPlaceAuto = d.easyPlaceAuto;
+                c.easyPlaceAutoRate = d.easyPlaceAutoRate;
                 c.pickGhost = d.pickGhost;
                 c.materialHelper = d.materialHelper;
                 c.materialHelperCells = d.materialHelperCells;
-                c.moveModifier = d.moveModifier;
-                c.rotateModifier = d.rotateModifier;
                 c.reach = d.reach;
                 c.toolItem = d.toolItem;
                 c.boxesAlways = d.boxesAlways;
                 c.toolRequired = d.toolRequired;
                 c.toolMode = d.toolMode;
-                c.modeModifier = d.modeModifier;
+                c.moveModifier = d.moveModifier;
+                c.rotateModifier = d.rotateModifier;
+                c.linkModifier = d.linkModifier;
+                c.clearModifier = d.clearModifier;
+                c.cornerModifier = d.cornerModifier;
                 c.countChests = d.countChests;
                 c.restockCount = d.restockCount;
+                c.autoBuildSpeed = d.autoBuildSpeed;
             }
             case HUD -> {
                 c.progressHud = d.progressHud;
                 c.crosshairHint = d.crosshairHint;
+                c.toolHud = d.toolHud;
             }
             case EFFECTS -> {
                 c.particles = d.particles;
                 c.sounds = d.sounds;
-                c.combo = d.combo;
                 c.layerCelebration = d.layerCelebration;
                 c.autoAdvanceLayer = d.autoAdvanceLayer;
                 c.finishCelebration = d.finishCelebration;
@@ -266,6 +269,11 @@ public final class SettingsScreen extends Screen {
                         Ui.toggle(c.easyPlace, v -> c.easyPlace = v, null));
                 l.option("Block to hand", "Easy place takes the ghost's block from your inventory when you don't hold it.",
                         Ui.toggle(c.easyPlaceAutoPick, v -> c.easyPlaceAutoPick = v, null));
+                l.option("Auto place", "Missing blocks within reach place themselves, bottom layer first, from the blocks you carry. "
+                                + "Pauses in menus, in spectator and while you hold something that isn't a block. Has its own key.",
+                        Ui.toggle(c.easyPlaceAuto, v -> c.easyPlaceAuto = v, null));
+                l.option("Auto place speed", "Blocks a second at most. Keep it low on servers with anti-cheat.",
+                        Ui.cycle(List.of(1, 2, 4, 6, 10, 20), c.easyPlaceAutoRate, n -> n + " a second", v -> c.easyPlaceAutoRate = v, null));
                 l.option("Pick ghosts", "Middle click on a ghost picks its block.", Ui.toggle(c.pickGhost, v -> c.pickGhost = v, null));
                 l.option("Material helper", "Holding a block marks the nearest ghosts that need it.",
                         Ui.toggle(c.materialHelper, v -> c.materialHelper = v, null));
@@ -273,29 +281,46 @@ public final class SettingsScreen extends Screen {
                         Ui.slider(8, 256, 8, c.materialHelperCells, v -> Integer.toString((int) v), v -> c.materialHelperCells = (int) v, null));
 
                 l.header("Moving the schematic");
-                l.option("Only with the tool", "Moving, turning and mirroring only work with the selection tool in hand. Without it, scrolling changes the hotbar as usual.",
-                        Ui.toggle(c.toolRequired, v -> c.toolRequired = v, null));
-                l.option("Tool scroll", "What plain scrolling does with the tool in hand while looking at a box: move, turn, mirror, step layers or show / hide.",
+                // Both scroll modifiers held together switch the mode; that row follows them.
+                Button switchMode = fixed(switchLabel(c));
+                l.option("Move the box you look at (or the selection)", "Does the tool's mode: moves it, or mirrors it in Mirror mode. The selection only moves.",
+                        modifier(c.moveModifier, "+scroll", v -> {
+                            c.moveModifier = v;
+                            switchMode.setMessage(Component.literal(switchLabel(c)));
+                        }));
+                l.option("Turn it 90°", "Turns the schematic you look at, whatever the mode.",
+                        modifier(c.rotateModifier, "+scroll", v -> {
+                            c.rotateModifier = v;
+                            switchMode.setMessage(Component.literal(switchLabel(c)));
+                        }));
+                l.option("Switch between Move and Mirror", "Both keys above held together, with the tool in hand. The tool panel shows the mode.", switchMode);
+                l.option("Tool mode", "What the move key + scroll does while looking at a box: move it or mirror it.",
                         Ui.cycle(List.of(io.blockcompanion.core.placement.ToolMode.values()), c.toolMode, m -> m.label, v -> c.toolMode = v, null));
-                l.option("Tool mode: scroll +", "Hold this and scroll with the tool in hand to switch what plain scrolling does.",
-                        modifier(c.modeModifier, v -> c.modeModifier = v));
-                l.option("Move: scroll +", "Hold this and scroll while looking at a box to move it.",
-                        modifier(c.moveModifier, v -> c.moveModifier = v));
-                l.option("Turn: scroll +", "Hold this and scroll while looking at a box to turn it.",
-                        modifier(c.rotateModifier, v -> c.rotateModifier = v));
+                l.option("Cycle views", "Everything, layers up to here, this layer only, only this schematic, hidden. The key is in the Keys section.",
+                        Ui.button(BlockCompanionClient.keyName("view"), "Change it in the Keys section.", b -> selectTab(Tab.KEYS)));
+                l.option("Only with the tool", "Moving, turning and mirroring (scroll and the mirror key) only work with the selection tool in hand.",
+                        Ui.toggle(c.toolRequired, v -> c.toolRequired = v, null));
                 l.option("Reach", "How far away looking at a box still counts.",
                         Ui.slider(16, 256, 8, c.reach, v -> (int) v + " blocks", v -> c.reach = v, null));
                 l.option("Keys", "Every BlockCompanion key can be changed in the Keys section.", Ui.button("Keys...", null, b -> selectTab(Tab.KEYS)));
 
                 l.header("Selection tool and chests");
-                l.option("Selection tool", "Left-click a block for corner 1, right-click for corner 2; sneak + right-click a chest to link it.",
+                l.option("Selection tool", "The item that marks corners, clears the selection and links chests.",
                         Ui.cycle(TOOLS, c.toolItem, SettingsScreen::toolName, v -> c.toolItem = v, null));
+                l.option("Corners", "Hold this and left-click a block with the tool for corner 1, right-click for corner 2. Off: only the Mark corner key sets them.",
+                        modifier(c.cornerModifier, "+left/right-click", v -> c.cornerModifier = v));
+                l.option("Clear the selection", "Hold this and right-click with the tool, aimed at a block or not.",
+                        modifier(c.clearModifier, "+right-click", v -> c.clearModifier = v));
+                l.option("Link a chest", "Hold this and right-click a chest with the tool to link it; again to unlink it.",
+                        modifier(c.linkModifier, "+right-click", v -> c.linkModifier = v));
                 l.option("Show boxes", "When the selection and the schematic boxes show: only while the selection tool is in your hand, or always. Ghosts always show.",
                         Ui.cycle(List.of(false, true), c.boxesAlways, v -> v ? "Always" : "Only with tool", v -> c.boxesAlways = v, null));
                 l.option("Count linked chests", "What your linked chests hold counts in the resource list, the info panel and Resource Tracker.",
                         Ui.toggle(c.countChests, v -> c.countChests = v, null));
                 l.option("Fetch from chests", "How many easy place asks for at once from your linked chests (BlockCompanion servers).",
                         Ui.cycle(List.of(16, 32, 64, 128, 256, 576), c.restockCount, n -> n == 576 ? "9 stacks" : n + "", v -> c.restockCount = v, null));
+                l.option("AutoBuild speed", "Blocks a second AutoBuild places (Resources step of the B screen). The server may allow less.",
+                        Ui.cycle(List.of(1, 2, 5, 10, 20, 40), c.autoBuildSpeed, n -> n + " a second", v -> c.autoBuildSpeed = v, null));
             }
             case HUD -> {
                 l.header("On screen");
@@ -303,6 +328,8 @@ public final class SettingsScreen extends Screen {
                         Ui.toggle(c.progressHud, v -> c.progressHud = v, null));
                 l.option("Crosshair hint", "Small text left of the crosshair: what a wrong block should be.",
                         Ui.toggle(c.crosshairHint, v -> c.crosshairHint = v, null));
+                l.option("Tool panel", "While the selection tool is in your hand: its mode, what that does and its controls.",
+                        Ui.toggle(c.toolHud, v -> c.toolHud = v, null));
                 l.option("Layout", "Drag the HUD pieces where you want them and set their size.",
                         Ui.button("Edit HUD...", null, b -> open(new HudEditorScreen(this))));
             }
@@ -311,7 +338,6 @@ public final class SettingsScreen extends Screen {
                 l.option("Sparkles", "A few particles when a ghost is filled correctly.", Ui.toggle(c.particles, v -> c.particles = v, null));
                 l.option("Sounds", "Soft chimes for correct blocks, a low note for wrong ones. They follow the Blocks volume.",
                         Ui.toggle(c.sounds, v -> c.sounds = v, null));
-                l.option("Rising chime", "The chime climbs with quick correct blocks in a row.", Ui.toggle(c.combo, v -> c.combo = v, null));
                 l.header("Milestones");
                 l.option("Layer done", "A toast and sparkles when a layer is finished.",
                         Ui.toggle(c.layerCelebration, v -> c.layerCelebration = v, null));
@@ -327,9 +353,24 @@ public final class SettingsScreen extends Screen {
         }
     }
 
-    private static CycleButton<ClientConfig.Modifier> modifier(ClientConfig.Modifier value, java.util.function.Consumer<ClientConfig.Modifier> set) {
-        return Ui.cycle(List.of(ClientConfig.Modifier.values()), value,
-                m -> m == ClientConfig.Modifier.NONE ? "Off" : m.name().charAt(0) + m.name().substring(1).toLowerCase(Locale.ROOT), set, null);
+    /** A modifier choice shown as it is used, "Shift+scroll"; "Off" switches that action off. */
+    private static CycleButton<ClientConfig.Modifier> modifier(ClientConfig.Modifier value, String suffix, java.util.function.Consumer<ClientConfig.Modifier> set) {
+        return Ui.cycle(List.of(ClientConfig.Modifier.values()), value, m -> m == ClientConfig.Modifier.NONE ? "Off" : m.label() + suffix, set, null);
+    }
+
+    /** "Ctrl+Shift+scroll": the turn and move modifiers together, or "Off" when either is off or they are the same. */
+    private static String switchLabel(ClientConfig c) {
+        ClientConfig.Modifier move = c.moveModifier, turn = c.rotateModifier;
+        if (move == ClientConfig.Modifier.NONE || turn == ClientConfig.Modifier.NONE || move == turn) return "Off";
+        return turn.label() + "+" + move.label() + "+scroll";
+    }
+
+    /** A control that can't be changed, showing {@code text}: for a key that follows other settings. */
+    private static Button fixed(String text) {
+        Button b = Button.builder(Component.literal(text), x -> {
+        }).tooltip(Tooltip.create(Component.literal("Follows the two keys above."))).size(100, 20).build();
+        b.active = false;
+        return b;
     }
 
     private void addColors(OptionList l, ClientConfig c) {
@@ -369,11 +410,9 @@ public final class SettingsScreen extends Screen {
 
     // ---- keys -------------------------------------------------------------------------------------------------------
 
-    /** BlockCompanion's keys, the shared-space key included once it exists. */
+    /** BlockCompanion's keys. */
     private static List<KeyMapping> keys() {
-        List<KeyMapping> all = new ArrayList<>(Keys.ALL);
-        if (SyncKeys.SHARED != null && !all.contains(SyncKeys.SHARED)) all.add(SyncKeys.SHARED);
-        return all;
+        return new ArrayList<>(Keys.ALL);
     }
 
     private void addKeys(OptionList l) {

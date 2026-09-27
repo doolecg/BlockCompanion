@@ -466,4 +466,99 @@ public sealed interface Message {
             return new ChestRestock(in.string(), in.varInt());
         }
     }
+
+    // ---- AutoBuild ------------------------------------------------------------------------------------------------
+
+    /**
+     * Client to server: build this placement from the linked chests, block by block and layer by layer from the bottom.
+     * The schematic must be in the shared space already ({@code hash}); {@code chests} are the linked chests to take
+     * from (the server only uses those the player really linked). The server checks everything again itself.
+     *
+     * @param blocksPerSecond the speed the player picked; the server caps it
+     */
+    record AutoBuildStart(String hash, PlacementPose pose, int blocksPerSecond, List<io.blockcompanion.core.chests.LinkedChests.Pos> chests)
+            implements Message {
+        public AutoBuildStart {
+            chests = List.copyOf(chests);
+        }
+
+        public Protocol.Type type() {
+            return Protocol.Type.AUTOBUILD_START;
+        }
+
+        public void writeBody(Wire.Out out) {
+            out.hash(hash);
+            pose.write(out);
+            out.varInt(blocksPerSecond).varInt(chests.size());
+            for (var c : chests) out.string(c.dimension()).i32(c.x()).i32(c.y()).i32(c.z());
+        }
+
+        static AutoBuildStart read(Wire.In in) throws IOException {
+            String hash = in.hash();
+            PlacementPose pose = PlacementPose.read(in);
+            int rate = in.varInt();
+            int n = in.count();
+            List<io.blockcompanion.core.chests.LinkedChests.Pos> chests = new ArrayList<>(n);
+            for (int i = 0; i < n; i++) chests.add(new io.blockcompanion.core.chests.LinkedChests.Pos(in.string(), in.i32(), in.i32(), in.i32()));
+            return new AutoBuildStart(hash, pose, rate, chests);
+        }
+    }
+
+    /** What the player does to a running AutoBuild. */
+    enum AutoBuildAction {
+        PAUSE, RESUME, STOP
+    }
+
+    /** Client to server: pause, resume or stop one of the player's AutoBuilds. */
+    record AutoBuildControl(UUID job, AutoBuildAction action) implements Message {
+        public Protocol.Type type() {
+            return Protocol.Type.AUTOBUILD_CONTROL;
+        }
+
+        public void writeBody(Wire.Out out) {
+            out.uuid(job).varInt(action.ordinal());
+        }
+
+        static AutoBuildControl read(Wire.In in) throws IOException {
+            UUID job = in.uuid();
+            int a = in.varInt();
+            if (a < 0 || a >= AutoBuildAction.values().length) throw new IOException("Bad AutoBuild action " + a);
+            return new AutoBuildControl(job, AutoBuildAction.values()[a]);
+        }
+    }
+
+    /**
+     * Server to the player who started it: how an AutoBuild stands. Sent when it starts, about twice a second while it
+     * runs, and when it pauses, finishes or stops. {@code hash} and {@code pose} say which placement it builds.
+     *
+     * @param done    steps dealt with (placed, already right or skipped); a door or bed counts once
+     * @param message why it waits, paused or stopped, or the finishing line; may be empty
+     */
+    record AutoBuildStatus(UUID job, String hash, PlacementPose pose, String name, io.blockcompanion.core.autobuild.AutoBuildJob.State state,
+                           long done, long total, long placed, long skipped, String message) implements Message {
+        public AutoBuildStatus {
+            if (message == null) message = "";
+        }
+
+        public Protocol.Type type() {
+            return Protocol.Type.AUTOBUILD_STATUS;
+        }
+
+        public void writeBody(Wire.Out out) {
+            out.uuid(job).hash(hash);
+            pose.write(out);
+            out.string(name).varInt(state.ordinal()).varLong(done).varLong(total).varLong(placed).varLong(skipped).string(Protocol.clip(message));
+        }
+
+        static AutoBuildStatus read(Wire.In in) throws IOException {
+            UUID job = in.uuid();
+            String hash = in.hash();
+            PlacementPose pose = PlacementPose.read(in);
+            String name = in.string();
+            int st = in.varInt();
+            var states = io.blockcompanion.core.autobuild.AutoBuildJob.State.values();
+            if (st < 0 || st >= states.length) throw new IOException("Bad AutoBuild state " + st);
+            return new AutoBuildStatus(job, hash, pose, name, states[st], in.varLong(), in.varLong(), in.varLong(), in.varLong(), in.string());
+        }
+    }
 }

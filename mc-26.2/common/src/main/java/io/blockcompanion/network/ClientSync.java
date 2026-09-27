@@ -65,7 +65,6 @@ public final class ClientSync {
 
     public static void tick(Minecraft mc) {
         init();
-        while (SyncKeys.SHARED != null && SyncKeys.SHARED.consumeClick()) mc.gui.setScreen(LibraryScreen.shared(mc.gui.screen()));
         ClientPacketListener conn = mc.getConnection();
         if (conn != lastConnection) {
             lastConnection = conn;
@@ -110,6 +109,11 @@ public final class ClientSync {
             if (mc.player == null) return;
             mc.player.sendSystemMessage(Component.literal("[BlockCompanion] ").withStyle(ChatFormatting.DARK_AQUA)
                     .append(Component.literal(message).withStyle(error ? ChatFormatting.RED : ChatFormatting.GRAY)));
+        }
+
+        @Override
+        public void autoBuild(io.blockcompanion.core.sync.Message.AutoBuildStatus status) {
+            io.blockcompanion.client.autobuild.AutoBuildClient.statusArrived(status);
         }
     }
 

@@ -1,5 +1,7 @@
 package io.blockcompanion.core.sync;
 
+import io.blockcompanion.core.chests.LinkedChests;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -45,6 +47,10 @@ public final class SyncClient {
         /** A message for the player. */
         default void notice(boolean error, String message) {
         }
+
+        /** News about one of the player's AutoBuilds (progress, paused, finished). */
+        default void autoBuild(Message.AutoBuildStatus status) {
+        }
     }
 
     private final Consumer<byte[]> sender;
@@ -71,6 +77,10 @@ public final class SyncClient {
     /** The player's linked chests as the server last reported them, and a counter that changes with them. */
     private final List<Message.ChestEntry> chests = new ArrayList<>();
     private long chestsVersion;
+
+    /** The player's AutoBuilds as the server last reported them, by job id, and starts waiting for their upload. */
+    private final Map<UUID, Message.AutoBuildStatus> autoBuilds = new LinkedHashMap<>();
+    private final Map<String, Message.AutoBuildStart> autoBuildsWaiting = new HashMap<>();
 
     // The link between the player's placement and a shared one.
     private UUID linked;
@@ -170,6 +180,49 @@ public final class SyncClient {
         if (serverPresent && features.chestBuildAllowed()) send(new Message.ChestRestock(item, count));
     }
 
+    // ---- AutoBuild --------------------------------------------------------------------------------------------------
+
+    /** True when this server runs AutoBuild and lets this player start it. */
+    public boolean autoBuildAllowed() {
+        return serverPresent && features.syncEnabled() && features.autoBuildAllowed()
+                && (features.can(Permission.AUTOBUILD) || features.can(Permission.ADMIN));
+    }
+
+    /**
+     * Starts AutoBuild on a placement: uploads its schematic if the server lacks it, then asks the server to build it
+     * from {@code chests}. Returns false (after telling the player) when it can't even ask.
+     */
+    public boolean startAutoBuild(String libraryName, PlacementPose pose, int blocksPerSecond, List<LinkedChests.Pos> chests) {
+        if (!autoBuildAllowed()) {
+            listener.notice(true, "This server doesn't let you use AutoBuild");
+            return false;
+        }
+        String hash = upload(libraryName);
+        if (hash == null) return false;
+        Message.AutoBuildStart start = new Message.AutoBuildStart(hash, pose, blocksPerSecond, chests);
+        if (schematics.containsKey(hash)) send(start);
+        else autoBuildsWaiting.put(hash, start);
+        return true;
+    }
+
+    /** Pauses, resumes or stops one of the player's AutoBuilds. */
+    public void controlAutoBuild(UUID job, Message.AutoBuildAction action) {
+        if (serverPresent) send(new Message.AutoBuildControl(job, action));
+    }
+
+    /** The latest AutoBuild news for the placement at {@code pose}, or null. */
+    public Message.AutoBuildStatus autoBuild(PlacementPose pose) {
+        Message.AutoBuildStatus found = null;
+        for (Message.AutoBuildStatus st : autoBuilds.values()) if (st.pose().equals(pose)) found = st;
+        return found;
+    }
+
+    /** True while an AutoBuild start for the placement at {@code pose} waits for its upload. */
+    public boolean autoBuildStarting(PlacementPose pose) {
+        for (Message.AutoBuildStart st : autoBuildsWaiting.values()) if (st.pose().equals(pose)) return true;
+        return false;
+    }
+
     /** The shared placement the player's placement follows, or null. */
     public UUID linked() {
         return linked;
@@ -214,6 +267,8 @@ public final class SyncClient {
         downloads.clear();
         sharesWaiting.clear();
         createRequests.clear();
+        autoBuilds.clear();
+        autoBuildsWaiting.clear();
         if (!chests.isEmpty()) chestsVersion++;
         chests.clear();
         unlink();
@@ -276,6 +331,12 @@ public final class SyncClient {
                     chests.add(e);
                 }
                 chestsVersion++;
+            }
+            case Message.AutoBuildStatus st -> {
+                // One entry per placement: a new run replaces the last one's news.
+                autoBuilds.values().removeIf(o -> !o.job().equals(st.job()) && o.pose().equals(st.pose()));
+                autoBuilds.put(st.job(), st);
+                listener.autoBuild(st);
             }
             default -> {
                 // Client-to-server types: ignore.
@@ -504,6 +565,8 @@ public final class SyncClient {
                 if (s.code() == Message.UploadCode.DONE) listener.notice(false, s.message());
                 ClientPlacementModel.Loaded cur = model.current();
                 if (sharesWaiting.remove(u.hash) != null && cur != null) create(u.hash, cur.pose());
+                Message.AutoBuildStart start = autoBuildsWaiting.remove(u.hash);
+                if (start != null) send(start);
             }
             case HASH_MISMATCH -> {
                 uploads.remove(s.transfer());
@@ -516,12 +579,14 @@ public final class SyncClient {
                     send(new Message.UploadBegin(transfer, u.hash, u.name, u.data.length));
                 } else {
                     sharesWaiting.remove(u.hash);
+                    autoBuildsWaiting.remove(u.hash);
                     listener.notice(true, s.message());
                 }
             }
             case REJECTED -> {
                 uploads.remove(s.transfer());
                 sharesWaiting.remove(u.hash);
+                autoBuildsWaiting.remove(u.hash);
                 listener.notice(true, "Upload of " + u.name + " refused: " + s.message());
             }
         }

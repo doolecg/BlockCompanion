@@ -23,6 +23,9 @@ permissions:
   blockcompanion.lock:
     description: Lock and unlock your own placements.
     default: true
+  blockcompanion.autobuild:
+    description: Start AutoBuild, which builds a placement from your linked chests (for free in creative).
+    default: op
   blockcompanion.admin:
     description: Ignore locks, delete anything, no per-player quota, reload the config.
     default: op
@@ -31,3 +34,4 @@ permissions:
       blockcompanion.upload: true
       blockcompanion.place: true
       blockcompanion.lock: true
+      blockcompanion.autobuild: true

@@ -17,9 +17,10 @@ public final class SelectionRenderer {
         // Nothing kept between frames: the box is submitted fresh each frame.
     }
 
-    public void submit(Box box, SubmitNodeCollector collector, PoseStack poseStack, Vec3 cam, Vec3 look) {
+    /** {@code lookedAt}: the selection is the box looked at (scrolling moves it), so its face brightens and its outline thickens. */
+    public void submit(Box box, boolean lookedAt, SubmitNodeCollector collector, PoseStack poseStack, Vec3 cam, Vec3 look) {
         int rgb = BlockCompanionClient.config().colors.get(Palette.Entry.SELECTION);
-        int face = BoxRenderer.lookedFace(box, cam, look, BlockCompanionClient.config().reach);
-        BoxRenderer.submit(box, rgb, BoxLook.EDGE_ALPHA, face, false, collector, poseStack, cam);
+        int face = lookedAt ? BoxRenderer.lookedFace(box, cam, look, BlockCompanionClient.config().reach) : -1;
+        BoxRenderer.submit(box, rgb, BoxLook.EDGE_ALPHA, face, lookedAt, collector, poseStack, cam);
     }
 }

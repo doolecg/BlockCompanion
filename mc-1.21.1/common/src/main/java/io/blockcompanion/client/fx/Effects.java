@@ -22,24 +22,21 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The satisfying part, kept quiet: a soft chime (rising with a quick combo) and a few sparkles when a ghost is filled
- * correctly, a low note for a wrong block, a toast and sparkles along a finished level, and fireworks with a summary
+ * The satisfying part, kept quiet: a few sparkles when a ghost is filled correctly (no sound, so building a lot stays
+ * calm), a low note for a wrong block, a toast and sparkles along a finished level, and fireworks with a summary
  * when the whole schematic is done. Sounds play in the Blocks category, so the game's volume sliders apply. Every part
  * can be switched off in the config.
  */
 public final class Effects {
-    /** Correct placements closer together than this keep the combo going. */
-    private static final long COMBO_GAP_MS = 1600;
-    /** A pentatonic climb, in semitones above the base pitch. */
-    private static final int[] SCALE = {0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24};
+    /** Placing a lot of wrong blocks plays the low note at most this often, so it doesn't get tiring. */
+    private static final long SOUND_GAP_MS = 3000;
     /** Placements further away than this are someone else's: sparkles, but no sound. */
     private static final double SOUND_RANGE = 12;
     private static final SystemToast.SystemToastId LAYER_TOAST = new SystemToast.SystemToastId(4000L);
     private static final SystemToast.SystemToastId FINISH_TOAST = new SystemToast.SystemToastId(8000L);
 
     private final RandomSource random = RandomSource.create();
-    private int combo;
-    private long lastCorrect;
+    private long lastWrongNote;
     /** Delayed firework bursts: tick countdown and position. */
     private final List<double[]> bursts = new ArrayList<>();
 
@@ -49,7 +46,6 @@ public final class Effects {
 
     /** A cell became correct through a live change. */
     public void correct(ClientLevel level, int x, int y, int z) {
-        Player player = Minecraft.getInstance().player;
         double cx = x + 0.5, cy = y + 0.5, cz = z + 0.5;
         if (config().particles) {
             for (int i = 0; i < 6; i++) {
@@ -58,19 +54,15 @@ public final class Effects {
                         cz + random.nextGaussian() * 0.25, dx, dy, dz);
             }
         }
-        if (player == null || player.distanceToSqr(cx, cy, cz) > SOUND_RANGE * SOUND_RANGE) return;
-        long now = System.currentTimeMillis();
-        combo = config().combo && now - lastCorrect < COMBO_GAP_MS ? Math.min(combo + 1, SCALE.length - 1) : 0;
-        lastCorrect = now;
-        float pitch = (float) (0.8 * Math.pow(2, SCALE[combo] / 12.0));
-        play(level, SoundEvents.AMETHYST_BLOCK_CHIME, cx, cy, cz, 0.55f, Math.min(pitch, 2f));
     }
 
     /** A cell became wrong through a live change. */
     public void wrong(ClientLevel level, int x, int y, int z) {
         Player player = Minecraft.getInstance().player;
-        combo = 0;
         if (player == null || player.distanceToSqr(x + 0.5, y + 0.5, z + 0.5) > SOUND_RANGE * SOUND_RANGE) return;
+        long now = System.currentTimeMillis();
+        if (now - lastWrongNote < SOUND_GAP_MS) return;
+        lastWrongNote = now;
         play(level, SoundEvents.NOTE_BLOCK_BASS.value(), x + 0.5, y + 0.5, z + 0.5, 0.35f, 0.6f);
     }
 
@@ -158,7 +150,6 @@ public final class Effects {
 
     public void clear() {
         bursts.clear();
-        combo = 0;
     }
 
     private void spawn(ClientLevel level, ParticleOptions type, double x, double y, double z, double dx, double dy, double dz) {

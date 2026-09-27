@@ -2,7 +2,6 @@ package io.blockcompanion.client.screen;
 
 import io.blockcompanion.client.BlockCompanionClient;
 import io.blockcompanion.client.LoadedPlacement;
-import io.blockcompanion.client.chests.ChestTracker;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
@@ -11,11 +10,11 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
-import java.util.Locale;
 
 /**
  * What a build needs, full screen (key N): the {@link ResourceList} of every item with needed, placed, carried, in
- * linked chests and still to get. Counts follow the live build progress; Refresh re-reads the inventory and chests.
+ * linked chests and still to get. Counts follow the build progress, the inventory and the linked chests by themselves
+ * (checked every tick, counted again only after a change); Refresh counts again now.
  * The same list is the schematic screen's Resources step.
  */
 public final class ResourceScreen extends Screen {
@@ -81,19 +80,17 @@ public final class ResourceScreen extends Screen {
         super.extractRenderState(g, mouseX, mouseY, partialTick);
         String name = placement == null ? "nothing loaded" : placement.shortName();
         Ui.titleBar(g, font, Component.literal(title.getString() + ": " + name), "", width);
-        Ui.centered(g, font, summary(list, visibleOnly), width / 2, Ui.TITLE_H + 7, Ui.MUTED);
+        Ui.centered(g, font, list.summary(), width / 2, Ui.TITLE_H + 7, Ui.MUTED);
         list.headings(g, panelY + 4);
         if (list.children().isEmpty()) {
             Ui.centered(g, font, list.total() > 0 ? "Everything is placed" : "Nothing to count", width / 2, list.getY() + 10, Ui.GOOD);
         }
     }
 
-    /** "1,234 of 5,000 blocks placed · 3 linked chests", shared with the schematic screen. */
-    static String summary(ResourceList list, boolean visibleOnly) {
-        int chests = ChestTracker.get().chests().size(), unknown = ChestTracker.get().chests().unknown();
-        String sub = String.format(Locale.ROOT, "%,d of %,d blocks placed%s", list.placed(), list.total(), visibleOnly ? " (visible layers)" : "");
-        if (chests > 0) sub += " · " + chests + (chests == 1 ? " linked chest" : " linked chests") + (unknown > 0 ? " (" + unknown + " not seen yet)" : "");
-        return sub;
+    @Override
+    public void tick() {
+        super.tick();
+        list.tick();
     }
 
     @Override

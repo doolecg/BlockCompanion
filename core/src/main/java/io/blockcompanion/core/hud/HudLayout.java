@@ -17,7 +17,9 @@ public final class HudLayout {
         /** The info panel: schematic, progress bars, layer, held block, linked chests. Bottom left by default. */
         PANEL("panel", "Info panel", 0, 1, 0, 1, 4, -4, 0.85f),
         /** What the looked-at block should be, small, just left of the crosshair. */
-        HINT("hint", "Crosshair hint", 0.5, 0.5, 1, 0.5, -8, 0, 0.75f);
+        HINT("hint", "Crosshair hint", 0.5, 0.5, 1, 0.5, -8, 0, 0.75f),
+        /** The selection tool's mode, what it does and its controls, while the tool is in hand. Bottom right by default. */
+        TOOL("tool", "Tool panel", 1, 1, 1, 1, -4, -4, 0.85f);
 
         public final String key, label;
         final Placement defaults;

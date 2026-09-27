@@ -1,8 +1,17 @@
 package io.blockcompanion.core.sync;
 
+import io.blockcompanion.core.autobuild.AutoBuildJob;
+import io.blockcompanion.core.autobuild.AutoBuildPlan;
+import io.blockcompanion.core.autobuild.BuildWorld;
 import io.blockcompanion.core.chests.LinkedChests;
+import io.blockcompanion.core.library.SchematicLibrary;
+import io.blockcompanion.core.model.BlockPos;
+import io.blockcompanion.core.model.Structure;
+import io.blockcompanion.core.placement.Placement;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -11,10 +20,12 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.LongSupplier;
+import java.util.function.Predicate;
 
 /**
  * The server side of the shared space, the same on Fabric, NeoForge and Paper. The platform feeds it every message on
@@ -43,8 +54,22 @@ public final class SyncServer {
     /** The world, for linked chests; null where the platform can't read containers. */
     private ChestAccess chests;
     private ChestLinkStore chestLinks;
+    /**
+     * What each linked chest held when the server last read it. A chest is read when it is linked, when a player closes
+     * it ({@link #chestChanged}), when AutoBuild starts or resumes from it, and when taking from it finds less than
+     * expected; what AutoBuild and restocks take is subtracted here without reading it again. Nothing polls the chests.
+     */
+    private final LinkedChests known = new LinkedChests();
     private int chestTicks;
-    /** Ticks between two looks at every player's linked chests. */
+    /** The world, for AutoBuild; null where the platform can't place blocks. */
+    private BuildWorld buildWorld;
+    /** Running AutoBuilds by job id. */
+    private final Map<UUID, RunningBuild> autoBuilds = new LinkedHashMap<>();
+    /** AutoBuilds one player may run at once. */
+    static final int MAX_AUTOBUILDS_PER_PLAYER = 4;
+    /** Ticks between two progress messages of a running AutoBuild. */
+    static final int AUTOBUILD_STATUS_TICKS = 10;
+    /** Ticks between two chest lists sent to a player while AutoBuild or restocks take from their chests. */
     static final int CHEST_REFRESH_TICKS = 40;
     /** Most items one restock may move. */
     static final int MAX_RESTOCK = 64 * 9;
@@ -58,9 +83,26 @@ public final class SyncServer {
         final ArrayDeque<OutgoingDownload> downloads = new ArrayDeque<>();
         /** The chest list last sent, to send again only when something changed. */
         List<Message.ChestEntry> chestsSent = List.of();
+        /** Their chests' contents changed since the list was last sent. */
+        boolean chestsDirty;
 
         Session(SyncPeer peer) {
             this.peer = peer;
+        }
+    }
+
+    /** An AutoBuild with what its status messages carry. */
+    private static final class RunningBuild {
+        final AutoBuildJob job;
+        final PlacementPose pose;
+        final List<LinkedChests.Pos> chests;
+        long sentVersion = -1;
+        int ticksSinceSent;
+
+        RunningBuild(AutoBuildJob job, PlacementPose pose, List<LinkedChests.Pos> chests) {
+            this.job = job;
+            this.pose = pose;
+            this.chests = chests;
         }
     }
 
@@ -96,6 +138,11 @@ public final class SyncServer {
         this.chests = access;
         this.chestLinks = links;
         links.load();
+    }
+
+    /** Turns on AutoBuild (linked chests must be on too): {@code world} places blocks. Without it, AutoBuild is off. */
+    public synchronized void setBuildWorld(BuildWorld world) {
+        this.buildWorld = world;
     }
 
     public synchronized SyncConfig config() {
@@ -175,9 +222,14 @@ public final class SyncServer {
         }
         long timeout = config.uploadTimeoutSeconds * 1000L;
         uploads.values().removeIf(u -> now - u.assembler().lastActivity() > timeout);
+        tickAutoBuilds();
         if (chests != null && ++chestTicks >= CHEST_REFRESH_TICKS) {
             chestTicks = 0;
-            for (Session s : sessions.values()) if (s.ready) sendChests(s, false);
+            for (Session s : sessions.values()) {
+                if (!s.chestsDirty) continue;
+                s.chestsDirty = false;
+                if (s.ready) sendChests(s, false);
+            }
         }
     }
 
@@ -202,6 +254,8 @@ public final class SyncServer {
             case Message.Lock l -> lock(s, actor, l);
             case Message.ChestLink l -> chestLink(s, l);
             case Message.ChestRestock r -> chestRestock(s, r);
+            case Message.AutoBuildStart b -> autoBuildStart(s, actor, b);
+            case Message.AutoBuildControl c -> autoBuildControl(s, actor, c);
             default -> {
                 // Server-to-client types coming the wrong way: ignore.
             }
@@ -229,6 +283,7 @@ public final class SyncServer {
         for (Message page : Chunks.pages(new ArrayList<>(store.placements()), Message.PlacementList::new)) s.peer.send(Protocol.encode(page));
         s.chestsSent = List.of();
         if (chestsAllowed()) sendChests(s, true);
+        for (RunningBuild r : autoBuilds.values()) if (r.job.owner().equals(s.peer.id())) sendAutoBuild(s, r);
     }
 
     /** The features one player gets: the server's switches plus their own permissions and quota. */
@@ -237,7 +292,7 @@ public final class SyncServer {
         return new Features(config.enabled && a.has(Permission.USE), config.maxFileSize, a.admin() ? -1 : config.playerQuota,
                 store.usedBy(peer.id()), Protocol.CHUNK_SIZE, Permission.mask(a.permissions()), config.allowAutoPlace,
                 config.autoPlaceRange, config.autoPlaceRate, config.allowCreativeFill, chestsAllowed(),
-                config.allowEasyPlace);
+                config.allowEasyPlace, config.allowEasyPlaceAuto, autoBuildAllowed(), config.autoBuildMaxRate);
     }
 
     private void sendFeatures(Session s) {
@@ -514,7 +569,8 @@ public final class SyncServer {
         LinkedChests.Pos pos = new LinkedChests.Pos(l.dimension(), l.x(), l.y(), l.z());
         UUID id = s.peer.id();
         if (l.link()) {
-            if (!chests.isContainer(l.dimension(), l.x(), l.y(), l.z())) {
+            Map<String, Long> items = chests.contents(l.dimension(), l.x(), l.y(), l.z());
+            if (items == null) {
                 notice(s, true, "There is no chest at " + pos);
                 return;
             }
@@ -522,8 +578,11 @@ public final class SyncServer {
                 notice(s, true, "You can link at most " + ChestLinkStore.MAX_PER_PLAYER + " chests");
                 return;
             }
+            known.link(pos);
+            known.setContents(pos, items, clock.getAsLong(), LinkedChests.Source.LIVE);
         } else {
             chestLinks.remove(id, pos);
+            if (!chestLinks.linked(pos)) known.unlink(pos);
         }
         chestLinks.save();
         sendChests(s, true);
@@ -535,10 +594,68 @@ public final class SyncServer {
         int moved = 0;
         for (LinkedChests.Pos p : chestLinks.of(s.peer.id())) {
             if (moved >= want) break;
-            moved += chests.take(s.peer.id(), p.dimension(), p.x(), p.y(), p.z(), r.item(), want - moved);
+            long had = has(p, r.item());
+            if (had <= 0) continue;
+            int n = chests.take(s.peer.id(), p.dimension(), p.x(), p.y(), p.z(), r.item(), want - moved);
+            tookFrom(p, r.item(), n, Math.min(had, want - moved));
+            moved += n;
         }
         if (moved == 0) notice(s, true, "No " + r.item() + " in your linked chests, or no room in your inventory");
         sendChests(s, false);
+    }
+
+    /**
+     * The platform saw a container closed (or otherwise changed by a player) at the position: a linked chest there is
+     * read again and its players get the new contents. Positions nobody linked are ignored, so the platform may pass
+     * every container a closed screen showed.
+     */
+    public synchronized void chestChanged(String dimension, int x, int y, int z) {
+        if (chests == null || chestLinks == null) return;
+        LinkedChests.Pos pos = new LinkedChests.Pos(dimension, x, y, z);
+        if (!chestLinks.linked(pos)) return;
+        long before = known.version();
+        read(pos);
+        if (known.version() == before) return;
+        for (Session s : sessions.values()) {
+            if (s.ready && chestLinks.has(s.peer.id(), pos)) sendChests(s, false);
+        }
+    }
+
+    /** Every chest any player linked, for the platform to match closed containers against. */
+    public synchronized Set<LinkedChests.Pos> linkedChests() {
+        return chestLinks == null ? Set.of() : chestLinks.all();
+    }
+
+    /** A linked chest's contents as last read, reading it now if it never was; null when unknown and not loaded. */
+    private Map<String, Long> contents(LinkedChests.Pos p) {
+        LinkedChests.Seen seen = known.seen(p);
+        return known.isLinked(p) && seen.source() != LinkedChests.Source.UNKNOWN ? seen.items() : read(p);
+    }
+
+    /** Reads a chest from the world into {@link #known}. When it isn't loaded (or is gone), what was known stays. */
+    private Map<String, Long> read(LinkedChests.Pos p) {
+        Map<String, Long> items = chests.contents(p.dimension(), p.x(), p.y(), p.z());
+        if (items != null) {
+            known.link(p);
+            known.setContents(p, items, clock.getAsLong(), LinkedChests.Source.LIVE);
+        }
+        LinkedChests.Seen seen = known.seen(p);
+        return seen.source() == LinkedChests.Source.UNKNOWN ? null : seen.items();
+    }
+
+    /** How many of an item a linked chest holds, as last read. */
+    private long has(LinkedChests.Pos p, String item) {
+        Map<String, Long> items = contents(p);
+        return items == null ? 0 : items.getOrDefault(item, 0L);
+    }
+
+    /**
+     * {@code n} of an item came out of a chest where {@code expected} were thought to be: subtracts it from what is known
+     * (reading the chest again only when it held less than thought), and marks the chest's players for a new list.
+     */
+    private void tookFrom(LinkedChests.Pos p, String item, int n, long expected) {
+        if (!known.removed(p, item, n) || n < expected) read(p);
+        for (Session s : sessions.values()) if (chestLinks.has(s.peer.id(), p)) s.chestsDirty = true;
     }
 
     /** Sends the player's chests with their contents when they changed ({@code force}: always). */
@@ -548,7 +665,7 @@ public final class SyncServer {
         if (mine.isEmpty() && s.chestsSent.isEmpty() && !force) return;
         List<Message.ChestEntry> now = new ArrayList<>();
         for (LinkedChests.Pos p : mine) {
-            Map<String, Long> items = chests.contents(p.dimension(), p.x(), p.y(), p.z());
+            Map<String, Long> items = contents(p);
             if (items == null) {
                 // Not loaded (or gone): keep what was sent before for this chest.
                 Message.ChestEntry old = s.chestsSent.stream().filter(e -> e.dimension().equals(p.dimension()) && e.x() == p.x()
@@ -561,6 +678,224 @@ public final class SyncServer {
         if (!force && now.equals(s.chestsSent)) return;
         s.chestsSent = List.copyOf(now);
         for (Message page : Chunks.pages(now, Message.ChestContents::new)) s.peer.send(Protocol.encode(page));
+    }
+
+    // ---- AutoBuild --------------------------------------------------------------------------------------------------
+
+    private boolean autoBuildAllowed() {
+        return config.enabled && config.allowAutoBuild && buildWorld != null && chests != null && chestLinks != null;
+    }
+
+    /** "Castle" from "builds/Castle.schem". */
+    static String displayName(String fileName) {
+        String n = fileName.substring(fileName.lastIndexOf('/') + 1);
+        int dot = n.lastIndexOf('.');
+        return dot > 0 ? n.substring(0, dot) : n;
+    }
+
+    /** Reads a shared schematic the way the client's library does (a project's visible layers, bounds at the origin). */
+    private Structure loadShared(SchematicInfo info) throws IOException {
+        Path dir = Files.createTempDirectory("blockcompanion-autobuild");
+        String clean = info.name().substring(info.name().lastIndexOf('/') + 1).replaceAll("[\\\\/:*?\"<>|]", "_");
+        Path file = dir.resolve(clean.isBlank() ? "schematic.schem" : clean);
+        try {
+            Files.copy(store.file(info.hash()), file);
+            return SchematicLibrary.loadFile(file);
+        } finally {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(dir);
+        }
+    }
+
+    /** The player's chests among {@code asked}: only chests they really linked count. */
+    private List<LinkedChests.Pos> ownChests(UUID player, List<LinkedChests.Pos> asked) {
+        List<LinkedChests.Pos> out = new ArrayList<>();
+        for (LinkedChests.Pos p : chestLinks.of(player)) if (asked.contains(p)) out.add(p);
+        return out;
+    }
+
+    /** What the chests hold, added up, as last read. */
+    private Map<String, Long> chestTotals(List<LinkedChests.Pos> list) {
+        Map<String, Long> have = new HashMap<>();
+        for (LinkedChests.Pos p : list) {
+            Map<String, Long> items = contents(p);
+            if (items != null) items.forEach((k, v) -> have.merge(k, v, Long::sum));
+        }
+        return have;
+    }
+
+    /**
+     * The linked chests as AutoBuild's item source: counts (from what the server last read, no world reads) and takes
+     * (uses up) items across them in link order, subtracting what it took from what is known.
+     */
+    private AutoBuildJob.Supplies supplies(List<LinkedChests.Pos> list) {
+        return new AutoBuildJob.Supplies() {
+            public long count(String item) {
+                long n = 0;
+                for (LinkedChests.Pos p : list) n += has(p, item);
+                return n;
+            }
+
+            public int take(String item, int count) {
+                int got = 0;
+                for (LinkedChests.Pos p : list) {
+                    if (got >= count) break;
+                    long had = has(p, item);
+                    if (had <= 0) continue;
+                    int n = chests.remove(p.dimension(), p.x(), p.y(), p.z(), item, count - got);
+                    tookFrom(p, item, n, Math.min(had, count - got));
+                    got += n;
+                }
+                return got;
+            }
+        };
+    }
+
+    private void autoBuildStart(Session s, LockRules.Actor actor, Message.AutoBuildStart m) {
+        if (!autoBuildAllowed()) {
+            notice(s, true, "This server has AutoBuild turned off");
+            return;
+        }
+        if (!actor.has(Permission.AUTOBUILD)) {
+            notice(s, true, "You may not use AutoBuild on this server");
+            return;
+        }
+        SchematicInfo info = store.schematic(m.hash());
+        if (info == null) {
+            notice(s, true, "Upload the schematic before starting AutoBuild");
+            return;
+        }
+        PlacementPose pose = m.pose();
+        if (!validPose(pose) || !buildWorld.dimensionExists(pose.dimension())) {
+            notice(s, true, "AutoBuild can't reach that placement's dimension");
+            return;
+        }
+        int mine = 0;
+        for (RunningBuild r : autoBuilds.values()) {
+            if (r.job.hash().equals(m.hash()) && r.pose.equals(pose)) {
+                notice(s, true, "AutoBuild is already running on " + r.job.name());
+                sendAutoBuild(s, r);
+                return;
+            }
+            if (r.job.owner().equals(actor.id())) mine++;
+        }
+        if (mine >= MAX_AUTOBUILDS_PER_PLAYER) {
+            notice(s, true, "You can run at most " + MAX_AUTOBUILDS_PER_PLAYER + " AutoBuilds at once");
+            return;
+        }
+        List<AutoBuildPlan.Step> steps;
+        try {
+            Placement p = new Placement(info.name(), loadShared(info), new BlockPos(pose.x(), pose.y(), pose.z()));
+            p.setOrientation(pose.rotation(), pose.mirrored());
+            steps = AutoBuildPlan.plan(p);
+        } catch (IOException | RuntimeException e) {
+            notice(s, true, "Could not read " + info.name() + ": " + e.getMessage());
+            return;
+        }
+        String dim = pose.dimension();
+        Predicate<AutoBuildPlan.Step> toPlace = st -> {
+            AutoBuildPlan.Cell c = st.main();
+            // Not loaded: count it, as the client's progress does for blocks it hasn't seen.
+            return !buildWorld.isLoaded(dim, c.x(), c.y(), c.z()) || AutoBuildPlan.needsPlacing(st, buildWorld.get(dim, c.x(), c.y(), c.z()));
+        };
+        long count = AutoBuildPlan.count(steps, toPlace);
+        if (count == 0) {
+            notice(s, false, "Nothing left to place in " + displayName(info.name()));
+            return;
+        }
+        List<LinkedChests.Pos> own = ownChests(actor.id(), m.chests());
+        // Starting is rare: read the chests once so the check below (and the run) starts from what is really there.
+        for (LinkedChests.Pos p : own) read(p);
+        if (!own.isEmpty()) sendChests(s, false);
+        if (!buildWorld.isCreative(actor.id())) {
+            // Survival and adventure build from the linked chests; checked here, whatever the client counted.
+            if (own.isEmpty()) {
+                notice(s, true, "Link chests with the materials before starting AutoBuild");
+                return;
+            }
+            Map<String, Long> shortfall = AutoBuildPlan.shortfall(AutoBuildPlan.required(steps, toPlace), chestTotals(own));
+            if (!shortfall.isEmpty()) {
+                notice(s, true, AutoBuildPlan.describeShort(shortfall, 4) + ": AutoBuild didn't start");
+                return;
+            }
+        }
+        int rate = Math.max(1, Math.min(config.autoBuildMaxRate, m.blocksPerSecond()));
+        AutoBuildJob job = new AutoBuildJob(UUID.randomUUID(), actor.id(), info.hash(), displayName(info.name()), dim, steps, rate);
+        RunningBuild r = new RunningBuild(job, pose, own);
+        autoBuilds.put(job.id(), r);
+        log.info(actor.name() + " started AutoBuild of " + info.name() + " (" + count + " blocks, " + rate + " per second)");
+        notice(s, false, String.format(Locale.ROOT, "AutoBuild started: %s (%,d blocks, %d per second)", job.name(), count, rate));
+        sendAutoBuild(s, r);
+    }
+
+    private void autoBuildControl(Session s, LockRules.Actor actor, Message.AutoBuildControl c) {
+        RunningBuild r = autoBuilds.get(c.job());
+        if (r == null || (!r.job.owner().equals(actor.id()) && !actor.admin())) return;
+        switch (c.action()) {
+            case PAUSE -> r.job.pause("Paused");
+            case RESUME -> {
+                // Often after refilling the chests (by hand, or a hopper): read them once again.
+                for (LinkedChests.Pos p : r.chests) read(p);
+                r.job.resume();
+            }
+            case STOP -> {
+                r.job.stop("");
+                notice(s, false, r.job.summary());
+            }
+        }
+        sendAutoBuild(s, r);
+        if (r.job.state().over()) autoBuilds.remove(c.job());
+    }
+
+    private void tickAutoBuilds() {
+        if (autoBuilds.isEmpty()) return;
+        if (buildWorld == null || chests == null) {
+            autoBuilds.clear();
+            return;
+        }
+        for (Iterator<RunningBuild> it = autoBuilds.values().iterator(); it.hasNext(); ) {
+            RunningBuild r = it.next();
+            AutoBuildJob job = r.job;
+            AutoBuildJob.Event e;
+            if (!config.allowAutoBuild || !config.enabled) {
+                job.stop("AutoBuild was turned off on this server");
+                e = AutoBuildJob.Event.STOPPED;
+            } else {
+                e = job.tick(buildWorld, supplies(r.chests));
+            }
+            Session s = sessions.get(job.owner());
+            boolean online = s != null && s.ready;
+            switch (e) {
+                case PAUSED -> {
+                    if (online) notice(s, true, "AutoBuild paused: " + job.message());
+                }
+                case FINISHED -> {
+                    buildWorld.ding(job.owner());
+                    if (online) notice(s, false, job.summary());
+                    log.info("AutoBuild of " + job.name() + " finished: " + job.placed() + " placed, " + job.skipped() + " skipped");
+                }
+                case STOPPED -> {
+                    if (online) notice(s, true, job.summary() + (job.message().isEmpty() ? "" : ": " + job.message()));
+                }
+                case NONE -> {
+                }
+            }
+            r.ticksSinceSent++;
+            boolean over = job.state().over();
+            if (online && job.version() != r.sentVersion && (over || e != AutoBuildJob.Event.NONE || r.ticksSinceSent >= AUTOBUILD_STATUS_TICKS)) {
+                sendAutoBuild(s, r);
+            }
+            if (over) it.remove();
+        }
+    }
+
+    private void sendAutoBuild(Session s, RunningBuild r) {
+        AutoBuildJob j = r.job;
+        String message = j.state().over() ? j.summary() + (j.message().isEmpty() ? "" : ": " + j.message()) : j.message();
+        s.peer.send(Protocol.encode(new Message.AutoBuildStatus(j.id(), j.hash(), r.pose, j.name(), j.state(), j.done(), j.total(), j.placed(),
+                j.skipped(), message)));
+        r.sentVersion = j.version();
+        r.ticksSinceSent = 0;
     }
 
     // ---- projects from BlockDesigner --------------------------------------------------------------------------------

@@ -17,9 +17,10 @@ public final class SelectionRenderer {
         // Nothing kept between frames: the box is drawn fresh each frame.
     }
 
-    public void render(Box box, Matrix4f modelView, Matrix4f projection, Vec3 cam, Vector3f look) {
+    /** {@code lookedAt}: the selection is the box looked at (scrolling moves it), so its face brightens and its outline thickens. */
+    public void render(Box box, boolean lookedAt, Matrix4f modelView, Matrix4f projection, Vec3 cam, Vector3f look) {
         int rgb = BlockCompanionClient.config().colors.get(Palette.Entry.SELECTION);
-        int face = BoxRenderer.lookedFace(box, cam, look.x(), look.y(), look.z(), BlockCompanionClient.config().reach);
-        BoxRenderer.render(box, rgb, BoxLook.EDGE_ALPHA, face, false, modelView, projection, cam);
+        int face = lookedAt ? BoxRenderer.lookedFace(box, cam, look.x(), look.y(), look.z(), BlockCompanionClient.config().reach) : -1;
+        BoxRenderer.render(box, rgb, BoxLook.EDGE_ALPHA, face, lookedAt, modelView, projection, cam);
     }
 }

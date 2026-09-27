@@ -10,7 +10,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -35,6 +34,14 @@ class GameLinkTest {
     final GameLink.Game game = new GameLink.Game() {
         public void projectReceived(String relative, Path file, String projectName, boolean open, String fromApp) {
             received.add(relative + "|" + projectName + "|" + open + "|" + fromApp);
+        }
+
+        public void projectLinked(String relative, Path file, String projectName, int slot, String fromApp) {
+            received.add("link " + slot + "|" + relative + "|" + projectName + "|" + fromApp);
+        }
+
+        public void appError(String app, String message, int slot) {
+            received.add("error " + slot + "|" + message + "|" + app);
         }
 
         public InstanceInfo refresh(InstanceInfo info) {
@@ -65,7 +72,7 @@ class GameLinkTest {
         final OutputStream out;
 
         App(int port) throws IOException {
-            s = new Socket(InetAddress.getLoopbackAddress(), port);
+            s = new Socket("127.0.0.1", port);
             s.setSoTimeout(5000);
             in = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8));
             out = s.getOutputStream();
@@ -219,6 +226,81 @@ class GameLinkTest {
                 assertThat(r.app()).isEqualTo("Resource Tracker");
                 assertThat(r.open()).isFalse();
             });
+        }
+    }
+
+    @Test
+    void editSendsTheFileAndTheAnswerLinksTheSlot() throws Exception {
+        start();
+        byte[] schematic = "litematic bytes".getBytes(StandardCharsets.UTF_8);
+        Path file = dir.resolve("Castle.litematic");
+        Files.write(file, schematic);
+        assertThat(link.requestEdit(2, file, "Castle")).isFalse();
+        try (App app = new App(link.port())) {
+            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "Resource Tracker", "version", "1.2.0"));
+            app.read();
+            link.tick();
+            assertThat(app.read()).containsEntry("type", "status");
+
+            assertThat(link.requestEdit(2, file, "Castle")).isTrue();
+            Map<String, Object> edit = app.read();
+            assertThat(edit).containsEntry("type", "edit").containsEntry("file", "Castle.litematic").containsEntry("name", "Castle")
+                    .containsEntry("sha256", Hashes.sha256(schematic));
+            assertThat(Json.integer(edit.get("slot"), -1)).isEqualTo(2);
+            assertThat(Base64.getDecoder().decode(Json.string(edit.get("data"), ""))).isEqualTo(schematic);
+
+            // The app answers with the project for that slot; it is written like any other and handed over with the slot.
+            byte[] project = "bdproj".getBytes(StandardCharsets.UTF_8);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("type", "project");
+            m.put("file", "Castle.bdproj");
+            m.put("name", "Castle");
+            m.put("open", false);
+            m.put("link", 2);
+            m.put("sha256", Hashes.sha256(project));
+            m.put("data", Base64.getEncoder().encodeToString(project));
+            app.send(m);
+            assertThat(app.read()).containsEntry("type", "received").containsEntry("file", "BlockDesigner/Castle.bdproj");
+            assertThat(Files.readAllBytes(dir.resolve("schematics/BlockDesigner/Castle.bdproj"))).isEqualTo(project);
+
+            app.send(Map.of("type", "error", "message", "Could not import Castle.litematic", "slot", 2));
+            app.send(Map.of("type", "error", "message", "Something else"));
+            app.send(Map.of("type", "ping"));
+            assertThat(app.read()).containsEntry("type", "pong");
+            link.tick();
+            assertThat(received).containsExactly("link 2|BlockDesigner/Castle.bdproj|Castle|Resource Tracker",
+                    "error 2|Could not import Castle.litematic|Resource Tracker", "error -1|Something else|Resource Tracker");
+            assertThat(link.lastReceived().open()).isTrue();
+        }
+    }
+
+    @Test
+    void linkedProjectFallsBackToASendForGamesWithoutPlacements() throws Exception {
+        List<String> plain = new ArrayList<>();
+        link = new GameLink(dir.resolve("schematics"), dir.resolve("instances"), InstanceInfo.SERVER, "Server", "1.21.1", "paper", "0.2.0", dir,
+                new GameLink.Game() {
+                    public void projectReceived(String relative, Path file, String projectName, boolean open, String fromApp) {
+                        plain.add(relative + "|" + open);
+                    }
+
+                    public InstanceInfo refresh(InstanceInfo info) {
+                        return info;
+                    }
+
+                    public Map<String, Object> status() {
+                        return Map.of();
+                    }
+                }, m -> { });
+        link.start();
+        byte[] data = "p".getBytes(StandardCharsets.UTF_8);
+        try (App app = new App(link.port())) {
+            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "Resource Tracker", "version", "1.2.0"));
+            app.read();
+            app.send(Map.of("type", "project", "file", "Castle.bdproj", "name", "Castle", "link", 0, "data",
+                    Base64.getEncoder().encodeToString(data)));
+            assertThat(app.read()).containsEntry("type", "received");
+            link.tick();
+            assertThat(plain).containsExactly("BlockDesigner/Castle.bdproj|true");
         }
     }
 

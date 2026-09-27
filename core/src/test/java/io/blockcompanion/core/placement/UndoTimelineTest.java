@@ -138,4 +138,37 @@ class UndoTimelineTest {
         assertThat(undo().target()).isSameAs(a);
         assertThat(undo()).isNull();
     }
+
+    @Test
+    void selectionMovesShareTheTimeline() {
+        // The client's timeline holds placements and the selection: each target brings its own history.
+        Selection sel = new Selection();
+        sel.set(1, new BlockPos(0, 64, 0), "minecraft:overworld");
+        sel.set(2, new BlockPos(3, 66, 3), "minecraft:overworld");
+        UndoTimeline<Object> mixed = new UndoTimeline<>(t -> t == sel ? sel.history() : ((Model) t).history);
+
+        PlacementHistory.State before = a.state();
+        a.p.moveTo(new BlockPos(11, 64, 10));
+        mixed.record(a, before, a.state(), 0);
+        before = sel.state();
+        sel.move(new BlockPos(0, 0, 2));
+        mixed.record(sel, before, sel.state(), 10_000);
+
+        UndoTimeline.Result<Object> r = mixed.undo(t -> t == sel ? sel.state() : ((Model) t).state());
+        assertThat(r.target()).isSameAs(sel);
+        sel.apply(r.step().target());
+        assertThat(sel.box()).contains(new io.blockcompanion.core.model.Box(0, 64, 0, 3, 66, 3));
+        assertThat(r.step().kind()).isEqualTo(PlacementHistory.Kind.POSITION);
+
+        r = mixed.redo(t -> t == sel ? sel.state() : ((Model) t).state());
+        assertThat(r.target()).isSameAs(sel);
+        sel.apply(r.step().target());
+        assertThat(sel.first()).isEqualTo(new BlockPos(0, 64, 2));
+
+        // Marking a new corner drops the selection's steps: undo goes on to the placement.
+        sel.set(1, new BlockPos(9, 64, 9), "minecraft:overworld");
+        r = mixed.undo(t -> t == sel ? sel.state() : ((Model) t).state());
+        assertThat(r.target()).isSameAs(a);
+        assertThat(sel.first()).isEqualTo(new BlockPos(9, 64, 9));
+    }
 }

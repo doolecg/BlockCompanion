@@ -64,7 +64,11 @@ class ProtocolTest {
                 new Message.ChestLink("minecraft:overworld", -3, 64, 12, true),
                 new Message.ChestContents(true, List.of(new Message.ChestEntry("minecraft:overworld", -3, 64, 12, true,
                         java.util.Map.of("minecraft:stone", 1234L, "minecraft:oak_log", 5L)))),
-                new Message.ChestRestock("minecraft:stone", 64));
+                new Message.ChestRestock("minecraft:stone", 64),
+                new Message.AutoBuildStart(HASH, pose, 5, List.of(new io.blockcompanion.core.chests.LinkedChests.Pos("minecraft:overworld", -3, 64, 12))),
+                new Message.AutoBuildControl(A, Message.AutoBuildAction.RESUME),
+                new Message.AutoBuildStatus(B, HASH, pose, "Castle", io.blockcompanion.core.autobuild.AutoBuildJob.State.PAUSED, 340, 1200, 300,
+                        40, "Out of glass"));
         for (Message m : all) assertThat(roundTrip(m)).as(m.type().name()).isEqualTo(m);
         // Every type but CHUNK (byte[] has no value equality) is covered above.
         assertThat(all.stream().map(Message::type).distinct().count()).isEqualTo(Protocol.Type.values().length - 1);
@@ -98,6 +102,28 @@ class ProtocolTest {
         assertThat(f.chunkSize()).isEqualTo(Protocol.CHUNK_SIZE);
         // A server from before easy_place existed allows it.
         assertThat(f.easyPlaceAllowed()).isTrue();
+        assertThat(f.easyPlaceAutoAllowed()).isTrue();
+    }
+
+    @Test
+    void easyPlaceAutoFollowsEasyPlaceUnlessSent() throws IOException {
+        Wire.Out out = new Wire.Out();
+        out.varInt(Protocol.VERSION).varInt(Protocol.Type.FEATURES.id).varInt(1);
+        out.string("easy_place").i64(0);
+        Features f = ((Message.ServerFeatures) Protocol.decode(out.toByteArray())).features();
+        assertThat(f.easyPlaceAllowed()).isFalse();
+        assertThat(f.easyPlaceAutoAllowed()).isFalse();
+
+        out = new Wire.Out();
+        out.varInt(Protocol.VERSION).varInt(Protocol.Type.FEATURES.id).varInt(2);
+        out.string("easy_place").i64(1).string("easy_place_auto").i64(0);
+        f = ((Message.ServerFeatures) Protocol.decode(out.toByteArray())).features();
+        assertThat(f.easyPlaceAllowed()).isTrue();
+        assertThat(f.easyPlaceAutoAllowed()).isFalse();
+
+        // Auto mode never outlives easy place itself.
+        assertThat(new Features(true, 0, 0, 0, Protocol.CHUNK_SIZE, 0, false, 0, 0, false, false, false, true).easyPlaceAutoAllowed())
+                .isFalse();
     }
 
     @Test

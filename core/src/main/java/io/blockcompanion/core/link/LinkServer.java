@@ -60,9 +60,12 @@ public final class LinkServer implements AutoCloseable {
         return HexFormat.of().formatHex(b);
     }
 
-    /** Opens a port on 127.0.0.1 chosen by the system and starts accepting; returns the port. */
+    /**
+     * Opens a port on 127.0.0.1 chosen by the system and starts accepting; returns the port. Always IPv4: the JVM's
+     * loopback address is {@code ::1} when it prefers IPv6 (some launchers and mods set that), and apps dial 127.0.0.1.
+     */
     public int start() throws IOException {
-        socket = new ServerSocket(0, 8, InetAddress.getLoopbackAddress());
+        socket = new ServerSocket(0, 8, InetAddress.getByAddress("localhost", new byte[]{127, 0, 0, 1}));
         Thread t = new Thread(this::acceptLoop, "BlockCompanion link");
         t.setDaemon(true);
         t.start();

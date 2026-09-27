@@ -73,6 +73,12 @@ means the server does.
 | 17 | `PLACEMENT_MOVE` | C→S | uuid, Pose |
 | 18 | `PLACEMENT_DELETE` | C→S | uuid |
 | 19 | `LOCK` | C→S | uuid, varint kind (0 = OWNER, 1 = EDIT), bool acquire |
+| 20 | `CHEST_LINK` | C→S | dimension id, i32 x, i32 y, i32 z, bool link |
+| 21 | `CHEST_CONTENTS` | S→C | bool reset, list of ChestEntry |
+| 22 | `CHEST_RESTOCK` | C→S | string item id, varint count |
+| 23 | `AUTOBUILD_START` | C→S | hash, Pose, varint blocks per second, list of ChestPos |
+| 24 | `AUTOBUILD_CONTROL` | C→S | uuid job, varint action (0 = PAUSE, 1 = RESUME, 2 = STOP) |
+| 25 | `AUTOBUILD_STATUS` | S→C | uuid job, hash, Pose, string name, varint state, varlong done, varlong total, varlong placed, varlong skipped, string message |
 
 These structures appear inside the message bodies:
 
@@ -85,6 +91,9 @@ These structures appear inside the message bodies:
   These are the same numbers as the client's `Placement`, so every client that applies them draws the same blocks.
 - **SharedPlacement:** uuid id, hash, name, then the Pose fields, owner uuid, owner name, bool locked, an optional
   editor uuid (a presence byte, then the uuid), editor name, varlong revision.
+- **ChestEntry:** dimension id, i32 x, i32 y, i32 z, bool valid, then a list of (string item id, varlong count).
+- **ChestPos:** dimension id, i32 x, i32 y, i32 z.
+- **AutoBuild states:** 0 `RUNNING`, 1 `WAITING` (for chunks to load), 2 `PAUSED`, 3 `FINISHED`, 4 `STOPPED`.
 - **Upload codes:**
 
   | Value | Code |
@@ -108,10 +117,12 @@ These structures appear inside the message bodies:
 | `max_file_size` | largest upload, in bytes |
 | `player_quota` / `player_used` | bytes this player may keep uploaded (-1 means unlimited) / bytes they have uploaded |
 | `chunk_size` | file data per chunk |
-| `permissions` | bit mask: 1 `use`, 2 `upload`, 4 `place`, 8 `lock`, 16 `admin` |
+| `permissions` | bit mask: 1 `use`, 2 `upload`, 4 `place`, 8 `lock`, 16 `admin`, 32 `autobuild` |
 | `auto_place`, `auto_place_range`, `auto_place_rate` | Milestone 3: whether the client-side printer may run, its range in blocks, and its blocks per second |
 | `creative_fill`, `chest_build` | Milestone 3: building helpers the server allows |
 | `easy_place` | 1 if easy place may be used (a right-click on a ghost places exactly its block, through normal placement packets). **A missing key means 1**, unlike the others: servers from before the key existed allowed it |
+| `easy_place_auto` | 1 if easy place's auto mode may be used (the missing blocks in reach placed by themselves). Never 1 while `easy_place` is 0. **A missing key means the same as `easy_place`** |
+| `auto_build`, `auto_build_rate` | 1 if this server runs AutoBuild (switched on, and the platform can place blocks and read chests), and the fastest it places in blocks per second. Who may start it is the `autobuild` permission bit |
 
 The server sends `FEATURES` after the hello, again after a config reload, and again after the player's quota use
 changes. Easy place reads `easy_place` from `SyncClient.features()`; Milestone 3 will read the auto-place flag the
@@ -125,7 +136,8 @@ same way.
 2. The server answers with its own `HELLO`.
    - **Versions differ:** the server sends nothing more, and the client tells the player to update.
    - **Versions match:** the server follows with `FEATURES`, the `SCHEMATIC_LIST` pages, then the `PLACEMENT_LIST`
-     pages. The first page of each list has `reset` set.
+     pages. The first page of each list has `reset` set. When the server allows building from chests, the player's
+     linked chests follow as `CHEST_CONTENTS` pages (`reset` set on the first).
 
 The server ignores any other message that arrives before a matching hello, while sharing is off, or from a player
 without `use`.
@@ -198,6 +210,54 @@ The lock rules live in `LockRules`. Each rule returns null when the action is al
 - **Echoes:** while the client holds the editing lock itself, it ignores the server's echoes of its own moves.
 - **Unlinking:** if the shared placement is removed, the player's copy stays loaded as a local, unlinked placement.
 
+### Linked chests
+
+The server keeps what each linked chest holds and sends a player their chests as `CHEST_CONTENTS` (the whole list,
+paged; an entry is `valid` when its contents are known, else the client keeps what it had). Nothing polls the chests.
+A chest is read from the world only:
+
+- **When it is linked** (`CHEST_LINK`); the list goes out at once.
+- **When a player closes it:** the platform reports every block container a closed screen showed (the mod watches each
+  player's open menu once a tick, the Paper plugin listens for inventory closes), and the server reads the ones someone
+  linked. The list goes to their players only if the contents changed.
+- **When it isn't known yet** and AutoBuild or a restock needs it, or taking from it found less than expected.
+
+What the server itself takes (a `CHEST_RESTOCK`, AutoBuild's items) is subtracted from the kept contents without
+reading the chest. After a restock the list goes out at once; while AutoBuild takes, at most every 2 seconds.
+
+The client shows the server's contents. Without a BlockCompanion server it records a linked chest's contents from its
+screen when the player closes it, and keeps them until the chest is opened again.
+
+### AutoBuild
+
+The server builds a placement from the player's linked chests (or for free in creative), block by block and layer by
+layer from the bottom. It runs in `SyncServer` with the planning in `core/autobuild` (`AutoBuildPlan`,
+`AutoBuildJob`); the platform only supplies a `BuildWorld` (read, check and set blocks, game mode, the ding).
+
+1. **Start:** the client uploads the schematic if the server lacks it (the usual upload), then sends
+   `AUTOBUILD_START` with the hash, the placement's Pose, the speed the player picked, and the linked chests to take
+   from.
+2. **The server checks again:** AutoBuild on and the `autobuild` permission; the schematic is in the shared space; the
+   dimension exists; no other AutoBuild runs on the same placement (hash and Pose) and the player runs fewer than 4.
+   It reads the schematic and plans it. Unless the player is in creative on the server (the client's word isn't
+   taken), only chests the player really linked count, and they must hold every item the blocks still to place take;
+   otherwise a `NOTICE` says what is short ("Short: 12 oak planks, 3 glass").
+3. **Building:** each tick up to the speed (capped by `autoBuildMaxBlocksPerSecond`):
+   - Positions that are already right are passed over (a door or trapdoor open or shut, powered or not, counts as
+     right). A different block is never broken: it is skipped and counted.
+   - A door, bed or tall plant is one step: one item, both halves set together. The other half's position is not a
+     step of its own.
+   - Each block's items come out of the chests as it is placed (nothing in creative). Blocks are set directly, never
+     used, so no door flips and no container opens.
+   - A block without support yet goes to the end of its layer and is tried once more; then it is skipped. Fluids and
+     blocks no item places are skipped.
+   - It waits while a step's chunk isn't loaded, pauses when an item runs out or the player leaves, and stops when the
+     dimension goes away.
+4. **Status:** `AUTOBUILD_STATUS` goes to the player when it starts, about twice a second while it runs, and when it
+   pauses, finishes or stops. `AUTOBUILD_CONTROL` pauses, resumes or stops it (the owner, or an admin).
+5. **Done:** the server plays a note-block bell for the player, at the player, and sends
+   `NOTICE` "AutoBuild finished: Castle (N placed, M skipped)".
+
 ## Permissions
 
 | Permission | Paper node | Mod default | Grants |
@@ -207,6 +267,7 @@ The lock rules live in `LockRules`. Each rule returns null when the action is al
 | PLACE | `blockcompanion.place` | everyone | share placements, move or delete unlocked placements |
 | LOCK | `blockcompanion.lock` | everyone | lock and unlock your own placements |
 | ADMIN | `blockcompanion.admin` | op | bypass locks, delete anything, no per-player quota |
+| AUTOBUILD | `blockcompanion.autobuild` (default op) | everyone in singleplayer and on LAN, op on a dedicated server | start AutoBuild |
 
 - **Paper, Spigot, Bukkit:** permissions use Bukkit permission nodes. `plugin.yml` sets the defaults, and `admin` grants
   the others as children.
@@ -246,6 +307,9 @@ Config keys, with their defaults:
 | `allowCreativeFill` | true | announced to clients (Milestone 3) |
 | `allowChestBuild` | true | announced to clients (Milestone 3) |
 | `allowEasyPlace` | true | announced to clients; with false, clients switch easy place off |
+| `allowEasyPlaceAuto` | true | announced to clients; with false, easy place's auto mode is off (easy place itself stays) |
+| `allowAutoBuild` | true | AutoBuild on or off (running ones stop when it goes off) |
+| `autoBuildMaxBlocksPerSecond` | 20 | the fastest AutoBuild may place; players pick their speed up to this |
 | `permission.*` | see Permissions | mod servers only |
 
 - **Missing keys:** they are written back with their defaults.
@@ -262,10 +326,14 @@ Config keys, with their defaults:
   - `Features`, `SchematicInfo`, `SharedPlacement`, `PlacementPose`, `Permission`, `LockRules`, `SyncConfig`,
     `SharedStore`, `SyncServer`, `SyncPeer`, `SyncLog`.
   - `SyncClient` and `ClientPlacementModel`: the client side.
+- `core/src/main/java/io/blockcompanion/core/autobuild/`: `AutoBuildPlan` (order, steps, items, the chest check),
+  `AutoBuildJob` (running one) and `BuildWorld` (what the platform provides: `server/ModBuildWorld` on the mods,
+  `PaperBuildWorld` on Paper). The client side is `client/autobuild/AutoBuildClient` and the schematic screen's
+  Resources step.
 - `mc-1.21.1/common`
   - `network/SyncPayload`, `network/SyncNetwork`.
   - `server/ModSyncServer`.
-  - Client only: `network/ClientSync`, `network/SyncKeys`, `client/screen/SharedScreen`.
+  - Client only: `network/ClientSync`, and the schematic screen's Source step on the Server side (`client/screen/LibraryScreen`).
 - `mc-1.21.1/fabric`: `BlockCompanionFabricSync` (main entrypoint) and `BlockCompanionFabricSyncClient`.
 - `mc-1.21.1/neoforge`: `BlockCompanionNeoForgeSync`, a second `@Mod` entrypoint for both sides, and
   `NeoForgeSyncClient`.

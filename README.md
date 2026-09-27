@@ -70,7 +70,7 @@ release has one jar per loader and Minecraft version:
      **From BlockDesigner** asks the app for the project it has open.
   2. **Placement:** what is loaded in this world, where it is, how far it is built and whether it is locked, with lock
      presets (unlocked, position, in place, everything), show / hide, bring here, turn, mirror, follow BlockDesigner
-     (Live) and **Unload**.
+     (Live), **Unload** and **Edit in BlockDesigner**.
   3. **Resources:** what the build still needs against your inventory and linked chests (the same list as **N**).
   4. **BlockDesigner:** the live link: off, waiting or connected (and to which app), the linked project, Start / Stop,
      Get project and Send now.
@@ -79,10 +79,12 @@ release has one jar per loader and Minecraft version:
   has a blue outline, and scrolling or **M** on it says what is locked.
 - **Whole projects:** a `.bdproj` loads as one schematic: its visible layers merged, each with its own offset, rotation
   and mirror as in BlockDesigner. Hidden layers are left out. Hover a project in the list to see its layers.
-- **Save from the world:** hold a **stick** and left-click one corner and right-click the opposite one (or press **K**
-  on each; a cyan outline shows the box), then **O**, type a name and save. The stick never breaks or uses the block
+- **Save from the world:** hold a **stick**, **Alt+left-click** one corner and **Alt+right-click** the opposite one (or
+  press **K** on each; a cyan outline shows the box), then **O**, type a name and save. The stick never breaks or uses the block
   you click while selecting; another item can be the tool in the settings. It is written as a Sponge v3 `.schem` in the schematic folder, with chest contents, signs and entities, ready
   to open in BlockDesigner. Without marked corners, **O** saves the loaded schematic's box: what you have built so far.
+  Look at the cyan box with the stick and **Shift+scroll** (in Move mode) to move the whole selection, the same way as a
+  schematic's box; **Shift+right-click** with the stick clears it.
 - **Saved per world:** every loaded schematic, where it is, how it's turned, the layer you're on and what's locked are
   kept for each world and server, and come back when you rejoin.
 
@@ -111,7 +113,17 @@ release has one jar per loader and Minecraft version:
   mid-air. It sends the same click a player would, so it works in survival on vanilla and Paper servers. Without the
   block in hand it takes it from your inventory; on a BlockCompanion server (and in singleplayer) it fetches it from
   your linked chests. With nothing to place from, nothing is placed and a hint says what's needed. A BlockCompanion
-  server can switch it off.
+  server can switch it off. It never clicks a cell that already holds a block or the same cell twice in a row, skips the
+  upper half of doors and beds (it comes with the lower one), and holding right-click with a block doesn't keep
+  flapping doors and trapdoors or opening chests inside a shown schematic.
+- **Auto place** (off by default; switch it in the settings or with its key, which has none until you set one): the
+  missing blocks within your reach place themselves, bottom layer first and nearest first, turned the right way, from
+  the blocks you carry (hotbar and off hand, and the rest of the inventory when easy place may take from it). Only
+  visible layers, only cells with a real block next to them, never over a wrong block, and never against a door, chest
+  or other block that reacts to a click. It places 4 blocks a second by default (up to 20, one per tick; a
+  BlockCompanion server's `autoPlaceBlocksPerSecond` and `autoPlaceRange` cap it) and leaves a cell alone for 2
+  seconds after trying it. It pauses while a menu is open, in spectator, and while you hold something that isn't a
+  block. The info panel shows "Auto place on" (or why it's paused). Servers can switch it off on its own.
 - **Pick block** (middle click) on a ghost selects its item from your hotbar or inventory (in creative it makes one).
 - **Info panel** in the bottom left, in the game's tooltip frame: the schematic, a bar that fills red, orange, yellow,
   green with how many blocks are left (and wrong), the current layer's own bar while you step through layers, the
@@ -119,12 +131,14 @@ release has one jar per loader and Minecraft version:
   from keep their last known state.
 - **Crosshair hint:** small text just left of the crosshair, no background: what a wrong block should be ("Should be
   Oak Stairs · facing north"), or which block the ghost you look at is.
+- **Tool panel** in the bottom right while the stick is in your hand, in the same frame as the info panel: the tool's
+  mode, what it does, and the stick's controls (Shift+scroll, Ctrl+scroll, corners, clearing, linking chests).
 - **Move and size the HUD** like Xaero's minimap: the HUD editor (from the settings screen's HUD tab) lets you drag the
-  info panel and the hint anywhere, scroll or slide to size them, and switch either off. They keep to the side of the
+  info panel, the hint and the tool panel anywhere, scroll or slide to size them, and switch any of them off. They keep to the side of the
   screen you put them on.
 - **Material helper:** holding a block gently marks the nearest ghosts that need it and shows how many are left.
-- **A little celebration:** a soft chime (rising with a quick run of correct blocks) and a few sparkles for each
-  correct block, a low note for a wrong one you placed yourself, a toast and sparkles when a layer is done (and on to the next layer), and
+- **A little celebration:** a few quiet sparkles for each correct block (no sound), a low note for a wrong one you
+  placed yourself (at most every few seconds), a toast and sparkles when a layer is done (and on to the next layer), and
   fireworks with a summary (time, blocks, accuracy) when the whole build is finished. Sounds follow the Blocks volume
   slider; each part can be switched off in the config.
 
@@ -133,19 +147,26 @@ release has one jar per loader and Minecraft version:
 - Moving, turning and mirroring need the **selection tool** (a stick by default) in your hand, so scrolling through the
   hotbar never knocks a build out of place. Without it the scroll wheel works as usual. (The schematic list's buttons,
   such as Bring here, work either way; the Building tab can switch the rule off.)
-- **Look at a box** (it turns yellow; the selected one is white), then **Alt+scroll** moves it one block per notch along the axis of the face
-  you're looking at: scrolling up pushes it away from you, down pulls it closer. **Ctrl+scroll** turns it 90°
-  (up clockwise). The hotbar doesn't change while you do.
-- **Plain scroll** with the stick does what its **mode** says, and **Shift+scroll** switches the mode (shown above the
-  hotbar): **Move**, **Turn**, **Mirror**, **Layers** (step through the levels) or **Show / hide** (everything, layers
-  up to here, this layer only, only this schematic, hidden). The mode is remembered.
+- **Look at a box** (it turns yellow; the selected one is white) with the stick in hand, then **Shift+scroll** moves it
+  one block per notch along the axis of the face you're looking at: scrolling up pushes it away from you, down pulls it
+  closer. **Ctrl+scroll** turns it 90° (up clockwise). Plain scroll changes the hotbar as usual.
+- The stick has two **modes** for Shift+scroll: **Move** and **Mirror** (any notch flips it). **Ctrl+Shift+scroll**
+  switches between them; the tool panel shows the current one, and it is remembered. Turning works in either mode.
+- **V** cycles the view of the schematic you look at (or the selected one): everything, layers up to here, this layer
+  only, only this schematic, hidden, and back. A hidden schematic's box still shows while the stick is in hand, so the
+  stick and the keys keep working on it.
+- The **selection** (the cyan box) moves the same way: when it's the box you look at, Shift+scroll in Move mode
+  shifts both corners together. When a schematic's box is also in view, the nearer one moves (one you see from outside
+  wins over one you stand in; standing in both, the smaller). Turning and mirroring don't apply to the selection.
+  **Shift+right-click** with the stick clears it, aimed at a block or not, and never opens or uses the block you click.
 - **Ctrl+Z** undoes and **Ctrl+Y** or **Ctrl+Shift+Z** redoes, like any program: one history across every loaded
-  schematic, stepping back through moves, turns, mirroring, locks, layers and hiding in the order you made them, no
+  schematic and the selection's moves, stepping back through moves, turns, mirroring, locks, layers and views in the order you made them, no
   stick needed. A new change clears what could be redone; a quick scroll counts as one step. Undo won't move a locked
   placement, and on a server a shared placement's undo is sent like any other move.
 - **M** mirrors it (stick in hand). Stairs, doors, rails, fences, signs and other directional blocks turn and mirror with it.
-- Every key can be rebound in **Options › Controls › BlockCompanion**. The scroll modifiers (Alt, Ctrl, Shift or none)
-  are on the settings screen's Building tab, with the reach (see [Settings](#settings)).
+- Every key can be rebound in **Options › Controls › BlockCompanion** or on the settings screen's Keys tab. The stick's
+  modifiers (Alt, Ctrl, Shift or off: for moving, turning, corners, clearing and linking) are on the Building tab, with
+  the reach (see [Settings](#settings)).
 
 ### Layers
 
@@ -158,14 +179,26 @@ release has one jar per loader and Minecraft version:
 - **N** opens the list of every item the build needs (a loaded project counts its visible layers): how many, how many
   are **placed** already, how many you carry, how many your **linked chests** hold, and how many are **still to get**
   (needed − placed − carried − in chests), most still to get first. Each row has a bar that fills red to green as the
-  item is covered. It follows the live progress; buttons pick the schematic, switch between the whole build and the
-  visible layers, and **Refresh** counts your inventory and chests again. Hover a row for the amount in stacks and
+  item is covered. It follows the live progress, your inventory and your chests by itself; buttons pick the
+  schematic, switch between the whole build and the visible layers, and **Refresh** counts again now. Hover a row for the amount in stacks and
   shulker boxes.
-- **Linked chests:** hold the stick, sneak and right-click a chest (or barrel, shulker box...) to link it, again to
-  unlink. On a BlockCompanion server, and in singleplayer, the server reports what's inside as it changes; elsewhere
-  the game remembers what it held when you last opened it. They count as materials here, in the info panel and in
+- **Linked chests:** hold the stick and **Ctrl+right-click** a chest (or barrel, shulker box...) to link it, again to
+  unlink. What's inside is counted when you link it and each time you close it after opening it, and stays as it was
+  until you open it again. What AutoBuild and easy place's restock take out comes off the count by itself. On a
+  server without BlockCompanion only chests you open are counted. They count as materials here, in the info panel and in
   Resource Tracker. It counts items the way Resource Tracker does: a double slab
   is two slabs, a door one item, crops their seeds, wall torches torches.
+- **AutoBuild:** when your linked chests hold everything a placement still needs, **Start AutoBuild** in the
+  schematic screen's Resources step has the server build it for you: block by block, layer by layer from the bottom,
+  each block's item taken out of your chests as it goes down. Hover the button to see what is short ("Short: 12 oak
+  planks, 3 glass"). In creative it needs no chests and takes nothing. It never breaks a block: a wrong block is
+  skipped and counted, and so is anything that can't stand where it is (sand over a hole). Doors, beds and tall plants
+  go down whole, as one item. It builds only in loaded chunks, pauses when an item runs out (refill a chest and press
+  **Resume**), and shows "AutoBuild: 340 / 1,200" on the action bar and next to its **Pause** / **Resume** and
+  **Stop** buttons. When it's done you hear a bell and read "AutoBuild finished: Castle (N placed, M skipped)". It
+  runs on the server, so it needs BlockCompanion there: always in singleplayer, and the mod or the Paper plugin on a
+  server, where the owner can turn it off (`allowAutoBuild`) and decide who may use it (operators by default on a
+  dedicated server, `blockcompanion.autobuild` on Paper). The speed is a setting (5 blocks a second by default).
 - **Live link to BlockDesigner:** while it runs, BlockDesigner's Resource Tracker finds the game, sends projects to it
   and follows your placements, progress and linked chests. Start and stop it on the schematic screen's BlockDesigner
   step (or the settings); **Start with the game** decides whether it starts by itself. See the
@@ -185,6 +218,10 @@ this computer; the [link protocol](docs/link-protocol.md) describes how.
 - **Live:** with Live on in Resource Tracker, every change you make in BlockDesigner reaches the game a moment later and
   the ghosts follow. Each loaded project has its own **Live** switch in the schematic list.
 - **Grab from BD** in the schematic list (or its key) asks BlockDesigner for the project it has open.
+- **Edit in BlockDesigner** (top right of a placement on the schematic screen's Placement step) opens that schematic
+  in BlockDesigner as its project. The placement then follows it where it stands: same position, turn, mirroring and
+  locks, with Live on, so every change you make in BlockDesigner shows up on it. Needs the app connected (and a Resource
+  Tracker that knows edits).
 - **Back to the app:** what is loaded, how far each build is and what your linked chests hold show in Resource Tracker;
   chest contents count as gathered there.
 - **Textures:** Resource Tracker's **Use its textures** shows blocks in BlockDesigner with the game's resource packs,
@@ -224,21 +261,24 @@ Everything is also in `config/blockcompanion.properties` (written with the defau
 | `pickBlock.ghosts` | true | middle click on a ghost picks its item |
 | `hud.progress` | true | the info panel |
 | `materialHelper.enabled`, `materialHelper.cells` | true, 48 | marks ghosts that need the held block, at most this many |
-| `effects.particles`, `effects.sounds`, `effects.combo` | true | sparkles, sounds, the rising chime |
+| `effects.particles`, `effects.sounds` | true | sparkles, sounds |
 | `effects.layerCelebration`, `layers.autoAdvance` | true | layer toast, and stepping to the next layer |
 | `effects.finishCelebration` | true | fireworks and the summary |
 | `progress.file` | true | writes the progress file for Resource Tracker |
 | `link.enabled` | true | starts the live link to BlockDesigner with the game |
-| `scroll.move.modifier`, `scroll.rotate.modifier`, `placement.reach` | ALT, CTRL, 96 | moving and turning the placement |
-| `tool.requiredToMove`, `tool.mode`, `scroll.mode.modifier` | true, MOVE, SHIFT | moving only with the tool in hand, what plain scrolling does with it, and the modifier that switches that |
+| `scroll.move.modifier`, `scroll.rotate.modifier`, `placement.reach` | SHIFT, CTRL, 96 | held while scrolling at a box: the tool's mode (move or mirror), and turning; both together switch the mode. How far looking at a box counts |
+| `tool.requiredToMove`, `tool.mode` | true, MOVE | moving only with the tool in hand; what the move modifier does (`MOVE` or `MIRROR`) |
+| `tool.corner.modifier`, `tool.clear.modifier`, `tool.link.modifier` | ALT, SHIFT, CTRL | held while clicking with the tool: corners (left 1, right 2), clearing the selection, linking a chest |
 | `boxes.show` | tool | `tool`: boxes only while the selection tool is held; `always` |
 | `color.ghost`, `color.wrong`, `color.extra`, `color.helper`, `color.blockEntity`, `color.box`, `color.boxHover`, `color.boxLocked`, `color.selection` | see the Colours tab | the colours, as `#RRGGBB` |
 | `updates.check`, `updates.autoDownload` | true, false | looking for updates, and downloading them without asking |
 | `easyPlace.autoPick` | true | easy place takes the block from the inventory when it isn't in hand |
-| `hud.hint` | true | the small hint left of the crosshair |
-| `hud.panel.*`, `hud.hint.*` | bottom left, left of the crosshair | where the HUD editor put each piece, and its size |
+| `easyPlace.auto`, `easyPlace.autoRate` | false, 4 | auto place, and its most blocks a second (1 to 20) |
+| `hud.hint`, `hud.toolPanel` | true, true | the small hint left of the crosshair; the tool panel while the stick is in hand |
+| `hud.panel.*`, `hud.hint.*`, `hud.tool.*` | bottom left, left of the crosshair, bottom right | where the HUD editor put each piece, and its size |
 | `tool.item` | minecraft:stick | the selection tool; empty switches it off |
 | `chests.count`, `chests.restockCount` | true, 64 | linked chests count as materials; how many easy place fetches at once |
+| `autoBuild.blocksPerSecond` | 5 | how fast AutoBuild places (the server may allow less) |
 | `link.enabled` | true | the live link to BlockDesigner |
 
 ### Planned
@@ -246,7 +286,7 @@ Everything is also in `config/blockcompanion.properties` (written with the defau
 - **Server sync** (milestone 2, built, waiting for a multiplayer check): one shared place per server to upload, share
   and lock schematics and BlockDesigner projects, on modded servers and through the Paper plugin.
 - **Building help** (milestone 3): client-side auto-place where the server allows it, and creative fill. Building from
-  linked chests is done.
+  linked chests and AutoBuild are done.
 
 ## Building from source
 
@@ -286,13 +326,14 @@ block entities and entities, transforms and block-state rotation,
 placement maths, the layer view, comparing, item counts that match Resource Tracker's own tests, the build progress
 tracker (live changes, unloaded chunks, saving), the progress file (format, name, atomic write, timing), easy place's
 click planning and ghost ray, the material helper, several placements per world and their locks, linked chests
-(through the sync server too), the live link (instance files, the token, projects, status) and the HUD layout.
+(through the sync server too), AutoBuild (its layer order, doors and beds as one step, items per block, the chest
+check, pausing and the server's own checks), the live link (instance files, the token, projects, status) and the HUD layout.
 
 ## Project layout
 
 | Path | What it does |
 |---|---|
-| `core/` | Plain Java 21, no Minecraft classes: formats (`formats`, `nbt`), BlockDesigner projects (`project`), the block model (`model`), transforms (`transform`), placement, layers, locks, saved placements, the selection and ray picking (`placement`), comparing (`compare`), item counting (`items`), build progress and the progress file (`progress`), easy place planning (`easyplace`), the schematic folder (`library`), linked chests (`chests`), the HUD layout (`hud`), the live link (`link`) and the sync protocol (`sync`) |
+| `core/` | Plain Java 21, no Minecraft classes: formats (`formats`, `nbt`), BlockDesigner projects (`project`), the block model (`model`), transforms (`transform`), placement, layers, locks, saved placements, the selection and ray picking (`placement`), comparing (`compare`), item counting (`items`), build progress and the progress file (`progress`), easy place planning (`easyplace`), AutoBuild planning and running (`autobuild`), the schematic folder (`library`), linked chests (`chests`), the HUD layout (`hud`), the live link (`link`) and the sync protocol (`sync`) |
 | `mc-1.21.1/common` | Minecraft 1.21.1 client code shared by both loaders: rendering, input, screens, mixins |
 | `mc-1.21.1/fabric`, `mc-1.21.1/neoforge` | 1.21.1 entry points and mod metadata |
 | `mc-26.2/common`, `mc-26.2/fabric` | The same for Minecraft 26.2 (Fabric only: NeoForge made no 26.2 build) |

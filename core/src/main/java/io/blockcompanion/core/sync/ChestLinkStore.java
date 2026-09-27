@@ -73,6 +73,24 @@ public final class ChestLinkStore {
         return s == null ? List.of() : List.copyOf(s);
     }
 
+    public boolean has(UUID player, LinkedChests.Pos pos) {
+        Set<LinkedChests.Pos> s = links.get(player);
+        return s != null && s.contains(pos);
+    }
+
+    /** True when any player linked the chest. */
+    public boolean linked(LinkedChests.Pos pos) {
+        for (Set<LinkedChests.Pos> s : links.values()) if (s.contains(pos)) return true;
+        return false;
+    }
+
+    /** Every linked chest, over all players. */
+    public Set<LinkedChests.Pos> all() {
+        Set<LinkedChests.Pos> out = new LinkedHashSet<>();
+        for (Set<LinkedChests.Pos> s : links.values()) out.addAll(s);
+        return out;
+    }
+
     /** Returns false when the player already has {@link #MAX_PER_PLAYER}. */
     public boolean add(UUID player, LinkedChests.Pos pos) {
         Set<LinkedChests.Pos> s = links.computeIfAbsent(player, k -> new LinkedHashSet<>());

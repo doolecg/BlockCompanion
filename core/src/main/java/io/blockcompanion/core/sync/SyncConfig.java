@@ -40,6 +40,12 @@ public final class SyncConfig {
     public boolean allowChestBuild = true;
     /** Easy place: a right-click on a ghost places exactly its block (normal placement packets, vanilla rules). */
     public boolean allowEasyPlace = true;
+    /** Easy place's auto mode: the missing blocks in the player's reach placed by themselves. Needs allowEasyPlace too. */
+    public boolean allowEasyPlaceAuto = true;
+    /** AutoBuild: the server builds a placement from a player's linked chests. Who may start it is permission.autobuild. */
+    public boolean allowAutoBuild = true;
+    /** The fastest AutoBuild may place, in blocks per second (players pick their speed up to this). */
+    public int autoBuildMaxRate = 20;
     public final Map<Permission, Access> access = new EnumMap<>(Permission.class);
 
     public SyncConfig() {
@@ -56,7 +62,16 @@ public final class SyncConfig {
     }
 
     public static SyncConfig load(Path file) {
+        return load(file, false);
+    }
+
+    /**
+     * Reads the config; on a {@code dedicated} server AutoBuild defaults to operators only (it places blocks anywhere
+     * in loaded chunks without the player walking there), in singleplayer and on LAN to everyone.
+     */
+    public static SyncConfig load(Path file, boolean dedicated) {
         SyncConfig c = new SyncConfig();
+        if (dedicated) c.access.put(Permission.AUTOBUILD, Access.OP);
         Properties p = new Properties();
         if (Files.isRegularFile(file)) {
             try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
@@ -89,6 +104,9 @@ public final class SyncConfig {
         allowCreativeFill = bool(p, "allowCreativeFill", allowCreativeFill);
         allowChestBuild = bool(p, "allowChestBuild", allowChestBuild);
         allowEasyPlace = bool(p, "allowEasyPlace", allowEasyPlace);
+        allowEasyPlaceAuto = bool(p, "allowEasyPlaceAuto", allowEasyPlaceAuto);
+        allowAutoBuild = bool(p, "allowAutoBuild", allowAutoBuild);
+        autoBuildMaxRate = (int) Math.max(1, Math.min(1000, num(p, "autoBuildMaxBlocksPerSecond", autoBuildMaxRate)));
         for (Permission perm : Permission.values()) {
             String key = "permission." + perm.name().toLowerCase(Locale.ROOT);
             String v = p.getProperty(key);
@@ -117,6 +135,9 @@ public final class SyncConfig {
         p.setProperty("allowCreativeFill", Boolean.toString(allowCreativeFill));
         p.setProperty("allowChestBuild", Boolean.toString(allowChestBuild));
         p.setProperty("allowEasyPlace", Boolean.toString(allowEasyPlace));
+        p.setProperty("allowEasyPlaceAuto", Boolean.toString(allowEasyPlaceAuto));
+        p.setProperty("allowAutoBuild", Boolean.toString(allowAutoBuild));
+        p.setProperty("autoBuildMaxBlocksPerSecond", Integer.toString(autoBuildMaxRate));
         for (Permission perm : Permission.values()) {
             p.setProperty("permission." + perm.name().toLowerCase(Locale.ROOT), access.get(perm).name().toLowerCase(Locale.ROOT));
         }
@@ -130,8 +151,10 @@ public final class SyncConfig {
                      BlockCompanion shared space (server sync).
                      Sizes are in KiB. permission.* (everyone, op or nobody) applies to Fabric/NeoForge servers;
                      on Paper/Spigot/Bukkit use the permission nodes blockcompanion.use/upload/place/lock/admin instead.
-                     allowAutoPlace, autoPlace*, allowCreativeFill, allowChestBuild and allowEasyPlace are announced to
-                     clients for the building helpers.""");
+                     allowAutoPlace, autoPlace*, allowCreativeFill, allowChestBuild, allowEasyPlace and
+                     allowEasyPlaceAuto are announced to clients for the building helpers.
+                     allowAutoBuild switches AutoBuild (the server builds a placement from linked chests) on or off;
+                     permission.autobuild (blockcompanion.autobuild on Paper) says who may start it.""");
         }
     }
 

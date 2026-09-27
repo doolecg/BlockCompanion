@@ -1,5 +1,6 @@
 package io.blockcompanion.client.screen;
 
+import io.blockcompanion.client.BlockCompanionClient;
 import io.blockcompanion.client.LoadedPlacement;
 import io.blockcompanion.client.chests.ChestTracker;
 import io.blockcompanion.client.hud.Bars;
@@ -28,7 +29,8 @@ import java.util.Map;
  * What a build needs, as a list: every item with how many the blocks need, how many are placed, how many you carry,
  * how many your linked chests hold, and how many are still to get (needed - placed - carried - in chests), most still to
  * get first. Each row's bar fills red to green as the item is covered. Used by the resource screen and by the
- * schematic screen's Resources step; {@link #count} fills it.
+ * schematic screen's Resources step; {@link #count} fills it and {@link #tick} counts again when the build, the
+ * inventory or the linked chests changed. Rows keep their text between frames: drawing formats nothing.
  */
 public final class ResourceList extends ObjectSelectionList<ResourceList.RowEntry> {
     /** One row: an item, needed, placed correctly, carried, in linked chests. */
@@ -42,9 +44,26 @@ public final class ResourceList extends ObjectSelectionList<ResourceList.RowEntr
         }
     }
 
+    /** Ticks between two counts while things keep changing (AutoBuild placing, items moving). */
+    private static final int RECOUNT_TICKS = 10;
+
     private final Minecraft mc;
     private long total, placed, toGet;
     private int cName, cNeed, cPlaced, cHave, cChests, cToGet;
+    private String summary = "";
+
+    // What the last count was of, and what it depended on: counted again only when one of these changes.
+    private LoadedPlacement counted;
+    private boolean visibleOnly;
+    private ProgressTracker seenTracker;
+    private long seenProgress = -1, seenChests = -1, seenLayers = -1;
+    private int seenInventory;
+    private boolean seenCountChests;
+    private int sinceCount;
+    // Per schematic: the block each item places (for its icon) and the entities' items; reading them walks every block.
+    private Object iconsOf;
+    private Map<String, BlockState> icons = Map.of();
+    private List<ItemCount.Need> entityNeeds = List.of();
 
     public ResourceList(Minecraft mc, int x, int y, int w, int h) {
         super(mc, w, h, y, 22);
@@ -96,6 +115,11 @@ public final class ResourceList extends ObjectSelectionList<ResourceList.RowEntr
         return toGet;
     }
 
+    /** "1,234 of 5,000 blocks placed · 3 linked chests", as of the last count. */
+    public String summary() {
+        return summary;
+    }
+
     /** Draws the column headings on the line at {@code y} (just above the list). */
     public void headings(GuiGraphicsExtractor g, int y) {
         columns();
@@ -110,9 +134,43 @@ public final class ResourceList extends ObjectSelectionList<ResourceList.RowEntr
 
     /** Counts {@code placement} (only the visible layers when {@code visibleOnly}) against the inventory and chests. */
     public void count(LoadedPlacement placement, boolean visibleOnly) {
+        this.counted = placement;
+        this.visibleOnly = visibleOnly;
+        recount();
+        setScrollAmount(0);
+    }
+
+    /**
+     * Every tick: counts again (keeping the scroll position) when the build progress, the visible layers, the inventory,
+     * the linked chests or the chests switch changed since the last count; at most every {@value #RECOUNT_TICKS} ticks.
+     */
+    public void tick() {
+        if (++sinceCount < RECOUNT_TICKS || !changed()) return;
+        double scroll = scrollAmount();
+        recount();
+        setScrollAmount(scroll);
+    }
+
+    private boolean changed() {
+        ProgressTracker t = counted == null ? null : counted.progress().tracker();
+        return t != seenTracker || (t != null && t.version() != seenProgress)
+                || (counted != null && visibleOnly && counted.layers.version() != seenLayers)
+                || ChestTracker.get().chests().version() != seenChests || BlockCompanionClient.config().countChests != seenCountChests
+                || inventoryHash() != seenInventory;
+    }
+
+    private void recount() {
+        sinceCount = 0;
+        LoadedPlacement placement = counted;
         List<Row> rows = new ArrayList<>();
         total = placed = toGet = 0;
         ProgressTracker tracker = placement == null ? null : placement.progress().tracker();
+        seenTracker = tracker;
+        seenProgress = tracker == null ? -1 : tracker.version();
+        seenLayers = placement == null ? -1 : placement.layers.version();
+        seenChests = ChestTracker.get().chests().version();
+        seenCountChests = BlockCompanionClient.config().countChests;
+        seenInventory = inventoryHash();
         if (tracker != null && mc.player != null) {
             Layers layers = placement.layers;
             int min = 0, max = tracker.height() - 1;
@@ -123,15 +181,13 @@ public final class ResourceList extends ObjectSelectionList<ResourceList.RowEntr
             ProgressTracker.Totals t = tracker.totals(min, max);
             total = t.total();
             placed = t.correct();
-            // Icons: the block each item places, from the schematic's own states.
-            Map<String, BlockState> icons = new HashMap<>();
-            for (ItemCount.Need n : ItemCount.count(placement.placement.structure().stateCounts(), List.of(), false)) icons.put(n.item(), n.icon());
+            schematicItems(placement);
             Map<String, Long> inv = inventory();
             Map<String, Long> chests = ChestTracker.get().totals();
             tracker.items(min, max).forEach((item, p) -> rows.add(new Row(item, p.needed(), p.placed(), inv.getOrDefault(item, 0L),
                     chests.getOrDefault(item, 0L), icons.get(item))));
             if (!visibleOnly) {
-                for (ItemCount.Need n : ItemCount.count(Map.of(), placement.placement.structure().entities(), false)) {
+                for (ItemCount.Need n : entityNeeds) {
                     rows.add(new Row(n.item(), n.count(), 0, inv.getOrDefault(n.item(), 0L), chests.getOrDefault(n.item(), 0L), n.icon()));
                 }
             }
@@ -145,7 +201,37 @@ public final class ResourceList extends ObjectSelectionList<ResourceList.RowEntr
         for (Row r : rows) toGet += r.toGet();
         clearEntries();
         for (Row r : rows) addEntry(new RowEntry(r));
-        setScrollAmount(0);
+        summary = summaryLine();
+    }
+
+    /** The icons and the entities' items of the placement's schematic, worked out once per schematic. */
+    private void schematicItems(LoadedPlacement placement) {
+        var structure = placement.placement.structure();
+        if (structure == iconsOf) return;
+        iconsOf = structure;
+        Map<String, BlockState> m = new HashMap<>();
+        for (ItemCount.Need n : ItemCount.count(structure.stateCounts(), List.of(), false)) m.put(n.item(), n.icon());
+        icons = m;
+        entityNeeds = ItemCount.count(Map.of(), structure.entities(), false);
+    }
+
+    private String summaryLine() {
+        int chests = ChestTracker.get().chests().size(), unknown = ChestTracker.get().chests().unknown();
+        String sub = String.format(Locale.ROOT, "%,d of %,d blocks placed%s", placed, total, visibleOnly ? " (visible layers)" : "");
+        if (chests > 0) sub += " · " + chests + (chests == 1 ? " linked chest" : " linked chests") + (unknown > 0 ? " (" + unknown + " not seen yet)" : "");
+        return sub;
+    }
+
+    /** A number that changes when the inventory's items or counts do; no allocation. */
+    private int inventoryHash() {
+        if (mc.player == null) return 0;
+        Inventory inv = mc.player.getInventory();
+        int h = 1;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack st = inv.getItem(i);
+            h = 31 * h + (st.isEmpty() ? 0 : System.identityHashCode(st.getItem()) * 67 + st.getCount());
+        }
+        return h;
     }
 
     private Map<String, Long> inventory() {
@@ -163,10 +249,15 @@ public final class ResourceList extends ObjectSelectionList<ResourceList.RowEntr
         return String.format(Locale.ROOT, "%,d", n);
     }
 
+    /** One row, with everything it shows worked out when it is made. */
     public final class RowEntry extends ObjectSelectionList.Entry<RowEntry> {
         final Row r;
         final ItemStack stack;
-        final String name;
+        final String name, fitted, needed, placedText, have, chests, toGetText;
+        final int placedColor, haveColor, chestsColor, toGetColor;
+        final boolean done;
+        final double covered;
+        final Component tip;
 
         RowEntry(Row r) {
             this.r = r;
@@ -179,6 +270,19 @@ public final class ResourceList extends ObjectSelectionList<ResourceList.RowEntr
                 stack = ItemStack.EMPTY;
                 name = Items.pretty(r.item());
             }
+            fitted = Ui.fit(mc.font, name, cNeed - cName - 34);
+            done = r.placed() >= r.needed();
+            needed = fmt(r.needed());
+            placedText = fmt(r.placed());
+            have = fmt(r.have());
+            chests = fmt(r.chests());
+            toGetText = r.toGet() == 0 ? "✓" : fmt(r.toGet());
+            placedColor = done ? Ui.GOOD : 0xFFB0D8FF;
+            haveColor = r.have() > 0 ? Ui.TEXT : Ui.DIM;
+            chestsColor = r.chests() > 0 ? 0xFFFFE27A : Ui.DIM;
+            toGetColor = r.toGet() == 0 ? Ui.GOOD : 0xFFFF7070;
+            covered = r.covered();
+            tip = Component.literal(name + (r.toGet() > 0 ? "\nStill to get: " + Items.stacks(r.toGet(), r.item()) : "\nCovered"));
         }
 
         @Override
@@ -188,21 +292,17 @@ public final class ResourceList extends ObjectSelectionList<ResourceList.RowEntr
             if (hovering) Ui.fill(g, left - 2, top - 1, left + getContentWidth() + 2, top + 19, Ui.HOVER);
             if (!stack.isEmpty()) g.item(stack, left + 1, top + 1);
             int ty = top + 2;
-            Ui.text(g, font, Ui.fit(font, name, cNeed - cName - 34), cName, ty, Ui.TEXT);
-            boolean done = r.placed() >= r.needed();
-            Ui.rightText(g, font, fmt(r.needed()), cNeed, ty, Ui.TEXT);
-            Ui.rightText(g, font, fmt(r.placed()), cPlaced, ty, done ? Ui.GOOD : 0xFFB0D8FF);
-            Ui.rightText(g, font, fmt(r.have()), cHave, ty, r.have() > 0 ? Ui.TEXT : Ui.DIM);
-            Ui.rightText(g, font, fmt(r.chests()), cChests, ty, r.chests() > 0 ? 0xFFFFE27A : Ui.DIM);
-            Ui.rightText(g, font, r.toGet() == 0 ? "✓" : fmt(r.toGet()), cToGet, ty, r.toGet() == 0 ? Ui.GOOD : 0xFFFF7070);
+            Ui.text(g, font, fitted, cName, ty, Ui.TEXT);
+            Ui.rightText(g, font, needed, cNeed, ty, Ui.TEXT);
+            Ui.rightText(g, font, placedText, cPlaced, ty, placedColor);
+            Ui.rightText(g, font, have, cHave, ty, haveColor);
+            Ui.rightText(g, font, chests, cChests, ty, chestsColor);
+            Ui.rightText(g, font, toGetText, cToGet, ty, toGetColor);
             // The bar under the name: how much of the item is placed, carried or in chests.
             int bx = cName, bw = cToGet - cName;
             if (done) Bars.solid(g, bx, top + 13, bw, 1, 0xFFFFD75A);
-            else Bars.gradient(g, bx, top + 13, bw, r.covered());
-            if (hovering) {
-                String tip = name + (r.toGet() > 0 ? "\nStill to get: " + Items.stacks(r.toGet(), r.item()) : "\nCovered");
-                Ui.tooltip(g, font, Component.literal(tip), mouseX, mouseY);
-            }
+            else Bars.gradient(g, bx, top + 13, bw, covered);
+            if (hovering) Ui.tooltip(g, font, tip, mouseX, mouseY);
         }
 
         @Override

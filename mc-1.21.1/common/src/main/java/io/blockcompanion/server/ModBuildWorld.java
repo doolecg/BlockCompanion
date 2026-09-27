@@ -1,0 +1,137 @@
+package io.blockcompanion.server;
+
+import io.blockcompanion.core.autobuild.BuildWorld;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.FallingBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.TreeMap;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * AutoBuild's world on a Fabric or NeoForge server: reads blocks and sets them straight into the level (neighbour
+ * updates on, nothing used or clicked, so doors and trapdoors keep the state the schematic gives them and no container
+ * opens). Server thread only; no client classes.
+ */
+final class ModBuildWorld implements BuildWorld {
+    private final MinecraftServer server;
+    /** Core state to game state; a missing block maps to the empty Optional. */
+    private final Map<io.blockcompanion.core.model.BlockState, Optional<BlockState>> toGame = new ConcurrentHashMap<>();
+
+    ModBuildWorld(MinecraftServer server) {
+        this.server = server;
+    }
+
+    private ServerLevel level(String dimension) {
+        ResourceLocation id = ResourceLocation.tryParse(dimension);
+        return id == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, id));
+    }
+
+    private BlockState game(io.blockcompanion.core.model.BlockState s) {
+        return toGame.computeIfAbsent(s, ModBuildWorld::resolve).orElse(null);
+    }
+
+    private static Optional<BlockState> resolve(io.blockcompanion.core.model.BlockState s) {
+        ResourceLocation id = ResourceLocation.tryParse(s.name());
+        if (id == null) return Optional.empty();
+        Optional<Block> block = BuiltInRegistries.BLOCK.getOptional(id);
+        if (block.isEmpty()) return Optional.empty();
+        BlockState mc = block.get().defaultBlockState();
+        for (var e : s.properties().entrySet()) {
+            Property<?> prop = block.get().getStateDefinition().getProperty(e.getKey());
+            if (prop != null) mc = with(mc, prop, e.getValue());
+        }
+        return Optional.of(mc);
+    }
+
+    private static <T extends Comparable<T>> BlockState with(BlockState state, Property<T> prop, String value) {
+        return prop.getValue(value).map(v -> state.setValue(prop, v)).orElse(state);
+    }
+
+    private static io.blockcompanion.core.model.BlockState core(BlockState mc) {
+        String name = BuiltInRegistries.BLOCK.getKey(mc.getBlock()).toString();
+        if (mc.getValues().isEmpty()) return io.blockcompanion.core.model.BlockState.of(name);
+        Map<String, String> props = new TreeMap<>();
+        for (var e : mc.getValues().entrySet()) props.put(e.getKey().getName(), valueName(e.getKey(), e.getValue()));
+        return io.blockcompanion.core.model.BlockState.of(name, props);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends Comparable<T>> String valueName(Property<T> prop, Comparable<?> value) {
+        return prop.getName((T) value);
+    }
+
+    @Override
+    public boolean dimensionExists(String dimension) {
+        return server.isRunning() && level(dimension) != null;
+    }
+
+    @Override
+    public boolean isLoaded(String dimension, int x, int y, int z) {
+        ServerLevel level = level(dimension);
+        return level != null && level.isLoaded(new BlockPos(x, y, z));
+    }
+
+    @Override
+    public io.blockcompanion.core.model.BlockState get(String dimension, int x, int y, int z) {
+        ServerLevel level = level(dimension);
+        if (level == null) return io.blockcompanion.core.model.BlockState.AIR;
+        return core(level.getBlockState(new BlockPos(x, y, z)));
+    }
+
+    @Override
+    public Check check(String dimension, int x, int y, int z, io.blockcompanion.core.model.BlockState state) {
+        ServerLevel level = level(dimension);
+        BlockState mc = game(state);
+        if (level == null || mc == null) return Check.UNKNOWN_BLOCK;
+        BlockPos pos = new BlockPos(x, y, z);
+        if (!level.isInWorldBounds(pos)) return Check.UNKNOWN_BLOCK;
+        // Sand and gravel over a gap would fall; torches, plants, rails and the like need what they stand on.
+        if (mc.getBlock() instanceof FallingBlock && FallingBlock.isFree(level.getBlockState(pos.below()))) return Check.UNSUPPORTED;
+        if (!mc.canSurvive(level, pos)) return Check.UNSUPPORTED;
+        return Check.OK;
+    }
+
+    @Override
+    public boolean place(String dimension, int x, int y, int z, io.blockcompanion.core.model.BlockState state) {
+        ServerLevel level = level(dimension);
+        BlockState mc = game(state);
+        if (level == null || mc == null) return false;
+        return level.setBlock(new BlockPos(x, y, z), mc, Block.UPDATE_ALL);
+    }
+
+    @Override
+    public boolean isCreative(UUID player) {
+        ServerPlayer p = server.getPlayerList().getPlayer(player);
+        return p != null && p.isCreative();
+    }
+
+    @Override
+    public boolean isOnline(UUID player) {
+        return server.getPlayerList().getPlayer(player) != null;
+    }
+
+    @Override
+    public void ding(UUID player) {
+        ServerPlayer p = server.getPlayerList().getPlayer(player);
+        if (p == null || p.connection == null) return;
+        // Only the player who started it hears it, right where they stand.
+        p.connection.send(new ClientboundSoundPacket(SoundEvents.NOTE_BLOCK_BELL, SoundSource.PLAYERS, p.getX(), p.getY(), p.getZ(), 1.0f, 1.2f,
+                p.getRandom().nextLong()));
+    }
+}

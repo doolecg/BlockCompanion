@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** Modifier + scroll while looking at the placement moves or turns it, and must not change the hotbar slot. */
+/** Shift / Ctrl + scroll on a box moves, mirrors or turns it (Ctrl+Shift switches the tool mode): none change the hotbar slot. */
 @Mixin(MouseHandler.class)
 abstract class MouseHandlerMixin {
     @Inject(method = "onScroll", at = @At("HEAD"), cancellable = true)

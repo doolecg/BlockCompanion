@@ -13,6 +13,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -29,11 +30,14 @@ import java.util.TreeMap;
 
 /**
  * The player's linked chests in the current world or server. Contents come from the server when it runs
- * BlockCompanion (singleplayer included), otherwise from the last time the player opened the chest. Saved per world in
- * {@code placements/<world>/chests.json}.
+ * BlockCompanion (singleplayer included): it reads a chest when it is linked and when a player closes it, and subtracts
+ * what AutoBuild and restocks take. Without it, a chest's contents are what its screen showed when the player last
+ * closed it. Nothing scans the world for chests. Saved per world in {@code placements/<world>/chests.json}.
  */
 public final class ChestTracker {
     private static final ChestTracker INSTANCE = new ChestTracker();
+    /** How long after a right-click a container screen can still be the clicked chest's. */
+    private static final int CLICK_TO_SCREEN_TICKS = 40;
 
     private final LinkedChests chests = new LinkedChests();
     private Path file;
@@ -42,6 +46,10 @@ public final class ChestTracker {
     /** The block the player last right-clicked, to know which chest a container screen belongs to. */
     private BlockPos lastClicked;
     private String lastClickedDimension;
+    private long lastClickedTime;
+    /** The last container screen seen, and the linked chest it shows (null when it shows none): read when it closes. */
+    private AbstractContainerScreen<?> openScreen;
+    private LinkedChests.Pos openChest;
     private long savedVersion = -1;
 
     public static ChestTracker get() {
@@ -59,6 +67,8 @@ public final class ChestTracker {
         serverVersion = -1;
         serverAdopted = false;
         lastClicked = null;
+        openScreen = null;
+        openChest = null;
         if (file == null) chests.clear();
         else chests.load(file);
         savedVersion = chests.version();
@@ -123,13 +133,14 @@ public final class ChestTracker {
     public void clicked(Level level, BlockPos pos) {
         lastClicked = pos;
         lastClickedDimension = level.dimension().location().toString();
+        lastClickedTime = level.getGameTime();
     }
 
-    /** Every tick: follows the server's list and reads open container screens of linked chests. */
+    /** Every tick: follows the server's list and notices linked chests' screens opening and closing. */
     public void tick(Minecraft mc) {
         if (mc.level == null || mc.player == null) return;
         followServer();
-        readOpenScreen(mc);
+        watchScreen(mc);
         if (mc.level.getGameTime() % 100 == 0) save();
     }
 
@@ -158,11 +169,34 @@ public final class ChestTracker {
         }
     }
 
-    private void readOpenScreen(Minecraft mc) {
-        if (lastClicked == null || !(mc.screen instanceof AbstractContainerScreen<?> screen)) return;
+    /** True when the server keeps the chests' contents (then it reads them when they close, not this client). */
+    private static boolean serverKeepsContents() {
+        SyncClient c = ClientSync.client();
+        return c != null && c.serverPresent() && c.features().chestBuildAllowed();
+    }
+
+    /**
+     * Notices a container screen opening (which linked chest it shows is worked out once) and closing: then, without a
+     * server that keeps the contents, what the screen last showed becomes the chest's contents until it is opened again.
+     */
+    private void watchScreen(Minecraft mc) {
+        AbstractContainerScreen<?> now = mc.screen instanceof AbstractContainerScreen<?> s ? s : null;
+        if (now == openScreen) return;
+        if (openScreen != null && openChest != null && !serverKeepsContents()) read(openScreen.getMenu(), openChest);
+        openScreen = now;
+        openChest = null;
+        if (now == null || lastClicked == null || now.getMenu() instanceof InventoryMenu) return;
+        BlockPos clicked = lastClicked;
+        lastClicked = null;
+        // A screen long after the click (a command, another mod) isn't that chest's.
+        if (mc.level.getGameTime() - lastClickedTime > CLICK_TO_SCREEN_TICKS) return;
         if (!mc.level.dimension().location().toString().equals(lastClickedDimension)) return;
-        if (!isLinked(mc.level, lastClicked)) return;
-        AbstractContainerMenu menu = screen.getMenu();
+        LinkedChests.Pos k = key(mc.level, canonical(mc.level, clicked));
+        if (chests.isLinked(k)) openChest = k;
+    }
+
+    /** The container slots of a closed chest's screen (the player's own slots left out) as the chest's contents. */
+    private void read(AbstractContainerMenu menu, LinkedChests.Pos pos) {
         Map<String, Long> items = new TreeMap<>();
         boolean any = false;
         for (Slot slot : menu.slots) {
@@ -172,7 +206,8 @@ public final class ChestTracker {
             if (!st.isEmpty()) items.merge(BuiltInRegistries.ITEM.getKey(st.getItem()).toString(), (long) st.getCount(), Long::sum);
         }
         if (!any) return;
-        chests.setContents(key(mc.level, canonical(mc.level, lastClicked)), items, System.currentTimeMillis(), LinkedChests.Source.OPENED);
+        chests.setContents(pos, items, System.currentTimeMillis(), LinkedChests.Source.OPENED);
+        save();
     }
 
     /** Item totals in the linked chests (empty when counting chests is off). */

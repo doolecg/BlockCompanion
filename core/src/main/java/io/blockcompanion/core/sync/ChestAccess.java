@@ -25,4 +25,10 @@ public interface ChestAccess {
      * fit). Returns how many moved.
      */
     int take(UUID player, String dimension, int x, int y, int z, String item, int count);
+
+    /**
+     * Takes up to {@code count} of {@code item} out of the container and uses it up (AutoBuild places it as a block).
+     * Returns how many came out; 0 when there is no container there or its chunk isn't loaded.
+     */
+    int remove(String dimension, int x, int y, int z, String item, int count);
 }

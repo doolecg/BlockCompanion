@@ -115,6 +115,21 @@ class SavedPlacementsTest {
     }
 
     @Test
+    void toolPanelSitsBottomRightAndOldConfigsGetIt() {
+        // A config from before the tool panel has no hud.tool.* keys: it gets the default, on.
+        Properties old = new Properties();
+        new HudLayout().write(old);
+        old.stringPropertyNames().stream().filter(k -> k.startsWith("hud.tool.")).forEach(old::remove);
+        HudLayout l = new HudLayout();
+        l.read(old);
+        HudLayout.Placement tool = l.get(HudLayout.Element.TOOL);
+        assertThat(tool.enabled()).isTrue();
+        // Bottom right, 4 px in: clear of the info panel in the bottom left.
+        assertThat(tool.topLeft(400, 300, 100, 40)).containsExactly(296, 256);
+        assertThat(l.get(HudLayout.Element.PANEL).topLeft(400, 300, 100, 50)).containsExactly(4, 246);
+    }
+
+    @Test
     void gradientGoesRedToGreen() {
         assertThat(Colors.gradient(0)).isEqualTo(0xFFD8413A);
         assertThat(Colors.gradient(1)).isEqualTo(0xFF5DBE4A);

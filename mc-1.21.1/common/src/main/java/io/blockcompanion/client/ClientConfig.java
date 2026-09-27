@@ -20,9 +20,9 @@ import java.util.Properties;
  */
 public final class ClientConfig {
     /** Bumped when a default changes enough that old files should pick up the new value. */
-    private static final int VERSION = 2;
+    private static final int VERSION = 3;
 
-    /** A modifier key held while scrolling. */
+    /** A modifier key held while scrolling or clicking. */
     public enum Modifier {
         ALT(GLFW.GLFW_KEY_LEFT_ALT, GLFW.GLFW_KEY_RIGHT_ALT),
         CTRL(GLFW.GLFW_KEY_LEFT_CONTROL, GLFW.GLFW_KEY_RIGHT_CONTROL),
@@ -37,6 +37,11 @@ public final class ClientConfig {
             this.right = right;
         }
 
+        /** "Alt", "Ctrl", "Shift" or "Off", for messages and the settings screen. */
+        public String label() {
+            return this == NONE ? "Off" : name().charAt(0) + name().substring(1).toLowerCase(Locale.ROOT);
+        }
+
         static Modifier parse(String s, Modifier fallback) {
             try {
                 return valueOf(s.trim().toUpperCase(Locale.ROOT));
@@ -46,16 +51,23 @@ public final class ClientConfig {
         }
     }
 
-    /** Held while scrolling, moves the placement along the looked-at face's axis. */
-    public Modifier moveModifier = Modifier.ALT;
-    /** Held while scrolling, turns the placement 90 degrees around Y. */
+    /**
+     * Held while scrolling and looking at a box: does the tool's mode (moves it, or mirrors it). Held together with
+     * {@link #rotateModifier} (Ctrl+Shift by default), switches the mode instead.
+     */
+    public Modifier moveModifier = Modifier.SHIFT;
+    /** Held while scrolling and looking at a placement's box: turns it 90 degrees around Y, whatever the mode. */
     public Modifier rotateModifier = Modifier.CTRL;
-    /** Held while scrolling with the selection tool in hand, steps through the tool's scroll modes. */
-    public Modifier modeModifier = Modifier.SHIFT;
-    /** What plain scrolling does with the selection tool in hand while looking at a box. */
+    /** Held while right-clicking with the selection tool, clears the selection. */
+    public Modifier clearModifier = Modifier.SHIFT;
+    /** Held while clicking with the selection tool: left-click sets corner 1, right-click corner 2. NONE: keys only. */
+    public Modifier cornerModifier = Modifier.ALT;
+    /** Held while right-clicking a chest with the selection tool: links it, or unlinks it. */
+    public Modifier linkModifier = Modifier.CTRL;
+    /** What the move modifier + scroll does with the selection tool in hand while looking at a box. */
     public ToolMode toolMode = ToolMode.MOVE;
     /**
-     * Moving, turning and mirroring a placement in the world (scrolling, the mirror key) and undo/redo only work with the
+     * Moving, turning and mirroring a placement in the world (Shift / Ctrl + scroll, the mirror key) only work with the
      * selection tool in hand; without it the scroll wheel changes the hotbar slot as usual. Ignored while the tool is off.
      */
     public boolean toolRequired = true;
@@ -73,8 +85,14 @@ public final class ClientConfig {
     public boolean easyPlace = true;
     /** Easy place brings the ghost's block from the inventory into the hand when it isn't held. */
     public boolean easyPlaceAutoPick = true;
+    /** Auto place: the missing blocks within reach place themselves, from the blocks the player carries. Has its own key. */
+    public boolean easyPlaceAuto = false;
+    /** Most blocks a second auto place places (1 to 20). */
+    public int easyPlaceAutoRate = io.blockcompanion.core.easyplace.AutoPlacePlanner.DEFAULT_RATE;
     /** How many items one fetch from the linked chests asks for. */
     public int restockCount = 64;
+    /** AutoBuild's speed in blocks per second (the server may cap it). */
+    public int autoBuildSpeed = 5;
     /** Middle click on a ghost picks its item. */
     public boolean pickGhost = true;
 
@@ -82,11 +100,13 @@ public final class ClientConfig {
     public boolean progressHud = true;
     /** The small hint next to the crosshair: what a wrong block should be, what a ghost is. */
     public boolean crosshairHint = true;
+    /** The tool panel (bottom right by default) while the selection tool is in hand: its mode and controls. */
+    public boolean toolHud = true;
     /** Where the HUD pieces are and how big, set in the HUD editor. */
     public final HudLayout hud = new HudLayout();
     /**
-     * The selection tool's item id: left-click a block for corner 1, right-click for corner 2, sneak + right-click a
-     * chest to link it. Empty switches the tool off.
+     * The selection tool's item id: Alt+left-click a block for corner 1, Alt+right-click for corner 2, Ctrl+right-click
+     * a chest to link it, Shift+right-click to clear the selection. Empty switches the tool off.
      */
     public String toolItem = "minecraft:stick";
     /**
@@ -103,8 +123,6 @@ public final class ClientConfig {
     public boolean particles = true;
     /** Soft sounds for correct and wrong placements and celebrations (they follow the Blocks volume slider). */
     public boolean sounds = true;
-    /** The chime rises with quick correct placements in a row. */
-    public boolean combo = true;
     /** Toast and sparkles when a level is finished. */
     public boolean layerCelebration = true;
     /** After finishing the current level in layer mode, step to the next one. */
@@ -140,9 +158,12 @@ public final class ClientConfig {
             }
         }
         int version = (int) parse(p.getProperty("config.version"), 1, 1, 1000);
-        c.moveModifier = Modifier.parse(p.getProperty("scroll.move.modifier"), Modifier.ALT);
+        // Before version 3 Alt+scroll moved and plain scroll did the tool's mode; now Shift+scroll does the mode.
+        c.moveModifier = version < 3 ? Modifier.SHIFT : Modifier.parse(p.getProperty("scroll.move.modifier"), Modifier.SHIFT);
         c.rotateModifier = Modifier.parse(p.getProperty("scroll.rotate.modifier"), Modifier.CTRL);
-        c.modeModifier = Modifier.parse(p.getProperty("scroll.mode.modifier"), Modifier.SHIFT);
+        c.clearModifier = Modifier.parse(p.getProperty("tool.clear.modifier"), Modifier.SHIFT);
+        c.cornerModifier = Modifier.parse(p.getProperty("tool.corner.modifier"), Modifier.ALT);
+        c.linkModifier = Modifier.parse(p.getProperty("tool.link.modifier"), Modifier.CTRL);
         c.toolMode = ToolMode.parse(p.getProperty("tool.mode"), ToolMode.MOVE);
         c.toolRequired = bool(p, "tool.requiredToMove", true);
         c.reach = parse(p.getProperty("placement.reach"), 96, 4, 512);
@@ -152,10 +173,15 @@ public final class ClientConfig {
         c.ghostBlockEntities = bool(p, "ghost.blockEntities", true);
         c.easyPlace = bool(p, "easyPlace.enabled", true);
         c.easyPlaceAutoPick = bool(p, "easyPlace.autoPick", true);
+        c.easyPlaceAuto = bool(p, "easyPlace.auto", false);
+        c.easyPlaceAutoRate = (int) parse(p.getProperty("easyPlace.autoRate"), io.blockcompanion.core.easyplace.AutoPlacePlanner.DEFAULT_RATE, 1,
+                io.blockcompanion.core.easyplace.AutoPlacePlanner.MAX_RATE);
         c.restockCount = (int) parse(p.getProperty("chests.restockCount"), 64, 1, 576);
+        c.autoBuildSpeed = (int) parse(p.getProperty("autoBuild.blocksPerSecond"), 5, 1, 100);
         c.pickGhost = bool(p, "pickBlock.ghosts", true);
         c.progressHud = bool(p, "hud.progress", true);
         c.crosshairHint = bool(p, "hud.hint", true);
+        c.toolHud = bool(p, "hud.toolPanel", true);
         c.hud.read(p);
         c.toolItem = p.getProperty("tool.item", "minecraft:stick").trim();
         c.boxesAlways = "always".equalsIgnoreCase(p.getProperty("boxes.show", "tool").trim());
@@ -163,7 +189,6 @@ public final class ClientConfig {
         c.materialHelperCells = (int) parse(p.getProperty("materialHelper.cells"), 48, 1, 512);
         c.particles = bool(p, "effects.particles", true);
         c.sounds = bool(p, "effects.sounds", true);
-        c.combo = bool(p, "effects.combo", true);
         c.layerCelebration = bool(p, "effects.layerCelebration", true);
         c.autoAdvanceLayer = bool(p, "layers.autoAdvance", true);
         c.finishCelebration = bool(p, "effects.finishCelebration", true);
@@ -200,7 +225,9 @@ public final class ClientConfig {
         p.setProperty("config.version", Integer.toString(VERSION));
         p.setProperty("scroll.move.modifier", moveModifier.name());
         p.setProperty("scroll.rotate.modifier", rotateModifier.name());
-        p.setProperty("scroll.mode.modifier", modeModifier.name());
+        p.setProperty("tool.clear.modifier", clearModifier.name());
+        p.setProperty("tool.corner.modifier", cornerModifier.name());
+        p.setProperty("tool.link.modifier", linkModifier.name());
         p.setProperty("tool.mode", toolMode.name());
         p.setProperty("tool.requiredToMove", Boolean.toString(toolRequired));
         p.setProperty("placement.reach", Double.toString(reach));
@@ -209,10 +236,14 @@ public final class ClientConfig {
         p.setProperty("ghost.blockEntities", Boolean.toString(ghostBlockEntities));
         p.setProperty("easyPlace.enabled", Boolean.toString(easyPlace));
         p.setProperty("easyPlace.autoPick", Boolean.toString(easyPlaceAutoPick));
+        p.setProperty("easyPlace.auto", Boolean.toString(easyPlaceAuto));
+        p.setProperty("easyPlace.autoRate", Integer.toString(easyPlaceAutoRate));
         p.setProperty("chests.restockCount", Integer.toString(restockCount));
+        p.setProperty("autoBuild.blocksPerSecond", Integer.toString(autoBuildSpeed));
         p.setProperty("pickBlock.ghosts", Boolean.toString(pickGhost));
         p.setProperty("hud.progress", Boolean.toString(progressHud));
         p.setProperty("hud.hint", Boolean.toString(crosshairHint));
+        p.setProperty("hud.toolPanel", Boolean.toString(toolHud));
         hud.write(p);
         p.setProperty("tool.item", toolItem);
         p.setProperty("boxes.show", boxesAlways ? "always" : "tool");
@@ -220,7 +251,6 @@ public final class ClientConfig {
         p.setProperty("materialHelper.cells", Integer.toString(materialHelperCells));
         p.setProperty("effects.particles", Boolean.toString(particles));
         p.setProperty("effects.sounds", Boolean.toString(sounds));
-        p.setProperty("effects.combo", Boolean.toString(combo));
         p.setProperty("effects.layerCelebration", Boolean.toString(layerCelebration));
         p.setProperty("layers.autoAdvance", Boolean.toString(autoAdvanceLayer));
         p.setProperty("effects.finishCelebration", Boolean.toString(finishCelebration));
@@ -234,8 +264,8 @@ public final class ClientConfig {
         try {
             Files.createDirectories(file.getParent());
             try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-                p.store(w, "BlockCompanion. Also on the settings screen in the game. Modifiers: ALT, CTRL, SHIFT or NONE (scroll"
-                        + " action off). ghost.alpha 0.3 to 1. tool.item empty switches the selection tool off. boxes.show tool or always. tool.mode: MOVE, ROTATE, MIRROR, LAYER or VISIBILITY. color.* are #RRGGBB. Keys are in Options > Controls.");
+                p.store(w, "BlockCompanion. Also on the settings screen in the game. Modifiers: ALT, CTRL, SHIFT or NONE (that"
+                        + " action off); scroll.move.modifier + scroll.rotate.modifier together switch tool.mode. ghost.alpha 0.3 to 1. tool.item empty switches the selection tool off. boxes.show tool or always. tool.mode: MOVE or MIRROR. color.* are #RRGGBB. Keys are in Options > Controls.");
             }
         } catch (IOException e) {
             BlockCompanionClient.LOG.warn("Could not write {}: {}", file, e.toString());

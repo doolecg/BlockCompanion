@@ -1,3 +1,53 @@
+# BlockCompanion 0.3.0
+
+The server can now build a schematic for you from your linked chests, easy place can place the blocks around you by
+itself, and the stick's controls are simpler, with a panel that shows them. For Minecraft 1.21.1 and 26.3 on Fabric and
+NeoForge, 26.2 on Fabric, and the Paper plugin.
+
+## New
+- **AutoBuild:** when your linked chests hold everything a placement still needs, **Start AutoBuild** in the schematic
+  screen's Resources step has the server build it, block by block and layer by layer from the bottom, taking each
+  block's item out of your chests as it goes. Hover the button to see what is short. It never breaks a block (a wrong
+  one is skipped and counted), pauses when an item runs out (refill and press **Resume**), and shows its progress on
+  the action bar. In creative it needs no chests. It runs on the server: always in singleplayer, and with the mod or
+  the Paper plugin on a server, where the owner can switch it off (`allowAutoBuild`) and decide who may use it.
+- **Auto place** (off by default, in the settings or on a key you choose): the missing blocks within reach place
+  themselves from what you carry, bottom layer first and nearest first, turned the right way. 4 blocks a second by
+  default, up to 20; a BlockCompanion server can cap or switch it off.
+- **Tool panel:** while the stick is in hand, a panel like the info panel (bottom right) shows the tool's mode and its
+  controls. Move or resize it in the HUD editor, or switch it off in the HUD settings.
+- **View key (V):** cycles the schematic you look at through everything, layers up to here, this layer only, only this
+  schematic and hidden. Undo steps back through it.
+- **Move the selection:** the cyan save box moves with the same scroll as a schematic's box.
+- **Edit in BlockDesigner** on a placement opens it in BlockDesigner as its project; the placement then follows your
+  changes live where it stands.
+
+## Changed
+- **New stick controls**, with the stick in hand while you look at a box:
+  - **Shift+scroll** does the mode: **Move** or **Mirror** (the selection only moves).
+  - **Ctrl+scroll** turns it 90°.
+  - **Ctrl+Shift+scroll** switches between Move and Mirror.
+  - **Alt+left-click** and **Alt+right-click** set the selection's corners.
+  - **Shift+right-click** clears the selection.
+  - **Ctrl+right-click** a chest links it; again unlinks it.
+  - Plain scrolling changes the hotbar as usual. All of these can be changed in the settings.
+- **Fewer modes:** only Move and Mirror are left; layers and show / hide moved to the view key.
+- **Quieter building:** no more chime for correct blocks, only a few sparkles. The low note for a wrong block plays at
+  most every few seconds.
+- **Linked chests** are read when you close them and kept until you open them again; what AutoBuild and easy place
+  take out comes off by itself. On a BlockCompanion server the server reads them when you close them.
+- **Easy place** never clicks a block that is already there or the same spot twice in a row, places doors and beds
+  from their lower half, and no longer keeps flapping doors or opening chests inside a schematic while you hold
+  right-click.
+- The J key is gone: the server's shared schematics are on the schematic screen's Source step.
+
+## Fixed
+- **The Resources page no longer drops the frame rate** with linked chests: the list, the chest totals and the
+  AutoBuild check are worked out only when something changes, not on every frame.
+- Linked chests on a server now update after you close them (before, only linking, restocking and AutoBuild did).
+
+---
+
 # BlockCompanion 0.2.0
 
 Moving a build now needs the stick in your hand, Ctrl+Z undoes like any program, and the schematic and settings

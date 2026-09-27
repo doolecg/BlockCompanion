@@ -23,10 +23,37 @@ import java.util.Set;
  * @param chestBuildAllowed   milestone 3: building from linked chests is allowed
  * @param easyPlaceAllowed    easy place (one right-click places the ghost's exact block) may be used; a server that
  *                            doesn't send the key allows it
+ * @param easyPlaceAutoAllowed easy place's auto mode (placing the missing blocks in reach by itself) may be used; only
+ *                            where easy place is; a server that doesn't send the key follows {@code easyPlaceAllowed}
+ * @param autoBuildAllowed    AutoBuild (the server builds a placement from the player's linked chests) is switched on
+ *                            here; whether this player may start it is {@link Permission#AUTOBUILD}. A server that
+ *                            doesn't send the key has no AutoBuild
+ * @param autoBuildRate       the fastest AutoBuild the server allows, in blocks per second
  */
 public record Features(boolean syncEnabled, long maxFileSize, long playerQuota, long playerUsed, int chunkSize, int permissions,
                        boolean autoPlaceAllowed, int autoPlaceRange, int autoPlaceRate, boolean creativeFillAllowed,
-                       boolean chestBuildAllowed, boolean easyPlaceAllowed) {
+                       boolean chestBuildAllowed, boolean easyPlaceAllowed, boolean easyPlaceAutoAllowed,
+                       boolean autoBuildAllowed, int autoBuildRate) {
+
+    public Features {
+        easyPlaceAutoAllowed = easyPlaceAutoAllowed && easyPlaceAllowed;
+    }
+
+    /** Features without AutoBuild (as from a server that doesn't send {@code auto_build}). */
+    public Features(boolean syncEnabled, long maxFileSize, long playerQuota, long playerUsed, int chunkSize, int permissions,
+                    boolean autoPlaceAllowed, int autoPlaceRange, int autoPlaceRate, boolean creativeFillAllowed,
+                    boolean chestBuildAllowed, boolean easyPlaceAllowed, boolean easyPlaceAutoAllowed) {
+        this(syncEnabled, maxFileSize, playerQuota, playerUsed, chunkSize, permissions, autoPlaceAllowed, autoPlaceRange, autoPlaceRate,
+                creativeFillAllowed, chestBuildAllowed, easyPlaceAllowed, easyPlaceAutoAllowed, false, 0);
+    }
+
+    /** Features whose easy place auto mode follows easy place (as from a server that doesn't send {@code easy_place_auto}). */
+    public Features(boolean syncEnabled, long maxFileSize, long playerQuota, long playerUsed, int chunkSize, int permissions,
+                    boolean autoPlaceAllowed, int autoPlaceRange, int autoPlaceRate, boolean creativeFillAllowed,
+                    boolean chestBuildAllowed, boolean easyPlaceAllowed) {
+        this(syncEnabled, maxFileSize, playerQuota, playerUsed, chunkSize, permissions, autoPlaceAllowed, autoPlaceRange, autoPlaceRate,
+                creativeFillAllowed, chestBuildAllowed, easyPlaceAllowed, easyPlaceAllowed);
+    }
 
     /** What a client assumes before (or without) hearing from a BlockCompanion server: nothing shared, no auto-place. */
     public static final Features NONE = new Features(false, 0, 0, 0, Protocol.CHUNK_SIZE, 0, false, 0, 0, false, false, true);
@@ -53,10 +80,14 @@ public record Features(boolean syncEnabled, long maxFileSize, long playerQuota, 
         m.put("creative_fill", creativeFillAllowed ? 1L : 0L);
         m.put("chest_build", chestBuildAllowed ? 1L : 0L);
         m.put("easy_place", easyPlaceAllowed ? 1L : 0L);
+        m.put("easy_place_auto", easyPlaceAutoAllowed ? 1L : 0L);
+        m.put("auto_build", autoBuildAllowed ? 1L : 0L);
+        m.put("auto_build_rate", (long) autoBuildRate);
         return m;
     }
 
     static Features fromMap(Map<String, Long> m) {
+        long easyPlace = m.getOrDefault("easy_place", 1L);
         int chunk = (int) Math.max(1024, Math.min(Protocol.CHUNK_SIZE, m.getOrDefault("chunk_size", (long) Protocol.CHUNK_SIZE)));
         return new Features(m.getOrDefault("sync", 0L) != 0, m.getOrDefault("max_file_size", 0L),
                 m.getOrDefault("player_quota", 0L), m.getOrDefault("player_used", 0L), chunk,
@@ -64,7 +95,10 @@ public record Features(boolean syncEnabled, long maxFileSize, long playerQuota, 
                 m.getOrDefault("auto_place_range", 0L).intValue(), m.getOrDefault("auto_place_rate", 0L).intValue(),
                 m.getOrDefault("creative_fill", 0L) != 0, m.getOrDefault("chest_build", 0L) != 0,
                 // Unlike the other keys, a missing easy_place means allowed: servers from before it existed allowed it.
-                m.getOrDefault("easy_place", 1L) != 0);
+                easyPlace != 0,
+                // A missing easy_place_auto follows easy_place: servers from before it existed allowed what easy place was.
+                m.getOrDefault("easy_place_auto", easyPlace) != 0,
+                m.getOrDefault("auto_build", 0L) != 0, m.getOrDefault("auto_build_rate", 0L).intValue());
     }
 
     void write(Wire.Out out) {

@@ -55,6 +55,8 @@ A wrong or missing token gets `{"type": "error", …}` and the connection closes
 | Message | What the game does |
 |---|---|
 | `project` | `{"file": "Castle.bdproj", "name": "Castle", "open": true, "sha256": "…", "data": "<base64>"}`. The game checks the hash, writes the file to `schematics/BlockDesigner/<file>` (a server: into its shared space) and answers `{"type": "received", "file": "BlockDesigner/Castle.bdproj"}`. `open: true` (the user pressed Send): placements of that file reload, and if none is loaded it is loaded in front of the player. `open: false` (a live update): only placements of that file set to follow BlockDesigner reload. A server switches shared placements of an earlier file of that name to the new one, so every player following them gets it. |
+| `project` with `link` | The answer to an `edit`: the same fields as `project`, plus `"link": <slot>`. The game writes the file as usual, then points the placement in that slot at it (keeping its position, rotation, mirroring, locks and progress where the blocks still match) and sets it to follow BlockDesigner, so later live updates of that project reload it. If the slot is gone it is handled as a plain `project` with `open: true`. Games that don't know `link` treat it as a plain `project`. |
+| `error` | `{"message": …, "slot": <slot>}`: something went wrong on the app's side, `slot` when it is about an `edit`. The game shows it to the player. |
 | `refresh` | Sends the status now. |
 | `app-status` | Optional: `{"project": "Castle", "live": true}`, the project open in the app and whether its Live button is on. The game shows it on its BlockDesigner step; send it after the welcome and whenever either changes. Games that don't know it ignore it. |
 
@@ -64,6 +66,7 @@ A wrong or missing token gets `{"type": "error", …}` and the connection closes
 |---|---|
 | `status` | Sent after the welcome and then at most once a second while something changes. `instance` (as in the welcome) plus, from a client: `world`, `server`, `dimension`, `placements` (each: `slot`, `file`, `name`, `sha256`, `dimension`, `x`, `y`, `z`, `rotation`, `mirrored`, `visible`, `live`, `selected`, `locks`, `lockedInPlace`, `total`, `correct`, `wrong`, `missing`) and `chests` (`count`, `unknown`, `items`: item id to count in the linked chests); from a server: `players`, `schematics` (`name`, `sha256`, `size`, `by`) and `placements` (a count). |
 | `grab` | The player pressed Grab from BlockDesigner: send the open project (`project` with `open: true`). |
+| `edit` | The player pressed **Edit in BlockDesigner** on a loaded placement: `{"slot": 2, "file": "Castle.litematic", "name": "Castle", "sha256": "…", "data": "<base64 of the schematic file>"}`. The app checks the hash, opens the file in BlockDesigner as the current project (importing `.schem`/`.litematic`/`.nbt`), and answers with a `project` carrying `"link": <slot>` (see below). On failure it answers `{"type": "error", "message": …, "slot": <slot>}`. |
 | `error` | `{"message": …}` about the last message. |
 
 Unknown message types are ignored both ways, so either side can add types.

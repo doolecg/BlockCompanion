@@ -19,7 +19,13 @@ public enum Permission {
     /** Lock and unlock your own placements. */
     LOCK,
     /** Ignore locks, delete anything, no per-player quota. */
-    ADMIN;
+    ADMIN,
+    /**
+     * Start AutoBuild: the server builds a placement from the player's linked chests (or for free in creative). By
+     * default everyone in singleplayer and on LAN, operators on a dedicated server; {@code blockcompanion.autobuild}
+     * (default op) on Paper.
+     */
+    AUTOBUILD;
 
     /** Bukkit permission node, e.g. {@code blockcompanion.upload}. */
     public String node() {

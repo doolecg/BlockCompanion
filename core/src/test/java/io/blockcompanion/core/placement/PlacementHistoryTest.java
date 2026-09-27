@@ -213,10 +213,19 @@ class PlacementHistoryTest {
 
     @Test
     void toolModesWrapBothWays() {
-        assertThat(ToolMode.MOVE.next(1)).isEqualTo(ToolMode.ROTATE);
-        assertThat(ToolMode.MOVE.next(-1)).isEqualTo(ToolMode.VISIBILITY);
-        assertThat(ToolMode.VISIBILITY.next(1)).isEqualTo(ToolMode.MOVE);
-        assertThat(ToolMode.parse("layer", ToolMode.MOVE)).isEqualTo(ToolMode.LAYER);
+        assertThat(ToolMode.MOVE.next(1)).isEqualTo(ToolMode.MIRROR);
+        assertThat(ToolMode.MOVE.next(-1)).isEqualTo(ToolMode.MIRROR);
+        assertThat(ToolMode.MIRROR.next(1)).isEqualTo(ToolMode.MOVE);
+        assertThat(ToolMode.parse("mirror", ToolMode.MOVE)).isEqualTo(ToolMode.MIRROR);
         assertThat(ToolMode.parse("nope", ToolMode.MOVE)).isEqualTo(ToolMode.MOVE);
+        // Modes that were dropped (turning has Ctrl+scroll, layers and show / hide a key) load as the fallback.
+        assertThat(ToolMode.parse("VISIBILITY", ToolMode.MOVE)).isEqualTo(ToolMode.MOVE);
+        assertThat(ToolMode.parse("ROTATE", ToolMode.MOVE)).isEqualTo(ToolMode.MOVE);
+        // Every mode has a name, a verb for the controls line and a one-line description for the tool panel.
+        for (ToolMode m : ToolMode.values()) {
+            assertThat(m.label).isNotBlank();
+            assertThat(m.verb).isNotBlank();
+            assertThat(m.hint).isNotBlank().doesNotEndWith(".");
+        }
     }
 }

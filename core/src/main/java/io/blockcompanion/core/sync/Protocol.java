@@ -76,7 +76,13 @@ public final class Protocol {
         /** S&rarr;C a page of what is in the player's linked chests. */
         CHEST_CONTENTS(21),
         /** C&rarr;S fetch items from the linked chests into the inventory. */
-        CHEST_RESTOCK(22);
+        CHEST_RESTOCK(22),
+        /** C&rarr;S start AutoBuild on a placement. */
+        AUTOBUILD_START(23),
+        /** C&rarr;S pause, resume or stop an AutoBuild. */
+        AUTOBUILD_CONTROL(24),
+        /** S&rarr;C how an AutoBuild stands. */
+        AUTOBUILD_STATUS(25);
 
         public final int id;
 
@@ -152,6 +158,9 @@ public final class Protocol {
             case CHEST_LINK -> Message.ChestLink.read(in);
             case CHEST_CONTENTS -> Message.ChestContents.read(in);
             case CHEST_RESTOCK -> Message.ChestRestock.read(in);
+            case AUTOBUILD_START -> Message.AutoBuildStart.read(in);
+            case AUTOBUILD_CONTROL -> Message.AutoBuildControl.read(in);
+            case AUTOBUILD_STATUS -> Message.AutoBuildStatus.read(in);
         };
         // A hello from a newer version may carry more after the fields we know; anything else must end exactly.
         if (type != Type.HELLO && in.remaining() != 0) throw new IOException("Trailing bytes after " + type);

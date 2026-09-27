@@ -36,7 +36,7 @@ import java.util.UUID;
  * opened to LAN). The loader entry points forward server start/stop, ticks, logouts and incoming payloads here; the
  * logic is the core {@link SyncServer}, the same one the Paper plugin runs. Data lives in {@code <world>/blockcompanion/},
  * settings in {@code config/blockcompanion-server.properties}. Linked chests are read and emptied through
- * {@link ModChestAccess}. A dedicated server also opens the BlockDesigner link, so Resource Tracker on the same computer
+ * {@link ModChestAccess}, and AutoBuild places blocks through {@link ModBuildWorld}. A dedicated server also opens the BlockDesigner link, so Resource Tracker on the same computer
  * can send projects straight into the shared space. No client classes: safe on a dedicated server.
  */
 public final class ModSyncServer {
@@ -51,6 +51,7 @@ public final class ModSyncServer {
         }
     };
     private static SyncServer sync;
+    private static ModChestAccess chests;
     private static Path configFile;
     private static GameLink link;
     private static MinecraftServer server;
@@ -61,7 +62,7 @@ public final class ModSyncServer {
     public static void start(MinecraftServer s, String software, String loader, String modVersion) {
         server = s;
         configFile = s.getServerDirectory().resolve("config").resolve("blockcompanion-server.properties");
-        SyncConfig config = SyncConfig.load(configFile);
+        SyncConfig config = SyncConfig.load(configFile, s.isDedicatedServer());
         Path root = s.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().resolve("blockcompanion");
         SharedStore store = new SharedStore(root, SYNC_LOG);
         try {
@@ -70,7 +71,9 @@ public final class ModSyncServer {
             LOG.error("Could not read the BlockCompanion shared space in {}", root, e);
         }
         sync = new SyncServer(store, config, software, System::currentTimeMillis, SYNC_LOG);
-        sync.setChestAccess(new ModChestAccess(s), new ChestLinkStore(root.resolve("chests.json")));
+        chests = new ModChestAccess(s);
+        sync.setChestAccess(chests, new ChestLinkStore(root.resolve("chests.json")));
+        sync.setBuildWorld(new ModBuildWorld(s));
         LOG.info("BlockCompanion shared space ready on {} (protocol {}): {} schematics, {} placements in {}", Protocol.CHANNEL,
                 Protocol.VERSION, store.schematics().size(), store.placements().size(), root);
         if (s.isDedicatedServer()) {
@@ -84,11 +87,15 @@ public final class ModSyncServer {
         if (link != null) link.close();
         link = null;
         sync = null;
+        chests = null;
         server = null;
     }
 
     public static void tick() {
-        if (sync != null) sync.tick();
+        if (sync != null) {
+            chests.tick(sync);
+            sync.tick();
+        }
         if (link != null) link.tick();
     }
 
@@ -97,13 +104,16 @@ public final class ModSyncServer {
     }
 
     public static void leave(UUID player) {
-        if (sync != null) sync.leave(player);
+        if (sync != null) {
+            chests.left(sync, player);
+            sync.leave(player);
+        }
         if (link != null) link.statusChanged();
     }
 
     /** Re-reads the config file and tells every connected player what changed. */
     public static void reloadConfig() {
-        if (sync != null) sync.setConfig(SyncConfig.load(configFile));
+        if (sync != null) sync.setConfig(SyncConfig.load(configFile, server != null && server.isDedicatedServer()));
     }
 
     /** The dedicated server as the BlockDesigner link sees it: projects go into the shared space. */

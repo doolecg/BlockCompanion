@@ -16,6 +16,7 @@ public final class HudPreview {
         return switch (e) {
             case PANEL -> Hud.drawPanel(g, mc.font, at, lp == null || lp.progress().tracker() == null ? Hud.sampleRows() : Hud.rows(mc, lp));
             case HINT -> Hud.drawHint(g, mc.font, at, "Should be Oak Stairs · facing north", 0xFFFF8A80);
+            case TOOL -> Hud.drawPanel(g, mc.font, at, Hud.toolRows(io.blockcompanion.client.BlockCompanionClient.config()));
         };
     }
 }

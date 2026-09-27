@@ -103,6 +103,11 @@ public final class ClientLink {
         return link != null && link.requestGrab();
     }
 
+    /** Sends a placement's schematic file to BlockDesigner to edit there. False when no app is connected. */
+    public static boolean edit(int slot, Path file, String name) throws IOException {
+        return link != null && link.requestEdit(slot, file, name);
+    }
+
     /** Sends the status (placements, progress, chests) to the connected apps now. False when none is connected. */
     public static boolean sendStatus() {
         if (link == null || !link.connected()) return false;
@@ -133,6 +138,16 @@ public final class ClientLink {
         @Override
         public void projectReceived(String relative, Path file, String projectName, boolean open, String fromApp) {
             BlockCompanionClient.onProjectReceived(relative, open, fromApp);
+        }
+
+        @Override
+        public void projectLinked(String relative, Path file, String projectName, int slot, String fromApp) {
+            BlockCompanionClient.onProjectLinked(relative, slot, fromApp);
+        }
+
+        @Override
+        public void appError(String app, String message, int slot) {
+            BlockCompanionClient.onLinkError(app, message, slot);
         }
 
         @Override

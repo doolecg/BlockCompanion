@@ -6,11 +6,13 @@ import io.blockcompanion.client.LoadedPlacement;
 import io.blockcompanion.client.StateMapper;
 import io.blockcompanion.client.chests.ChestTracker;
 import io.blockcompanion.client.easyplace.EasyPlace;
+import io.blockcompanion.client.tool.SelectionTool;
 import io.blockcompanion.core.compare.Compare;
 import io.blockcompanion.core.hud.HudLayout;
 import io.blockcompanion.core.items.Items;
 import io.blockcompanion.core.placement.Layers;
 import io.blockcompanion.core.placement.PlacementLock;
+import io.blockcompanion.core.placement.ToolMode;
 import io.blockcompanion.core.progress.ProgressTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -28,13 +30,15 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The HUD, in two movable pieces (see {@link HudLayout} and the HUD editor):
+ * The HUD, in three movable pieces (see {@link HudLayout} and the HUD editor):
  * <ul>
  *   <li>the <b>info panel</b>, bottom left by default, in the game's tooltip frame like Jade's: the schematic, its
  *   progress bar, the current layer, the held block with how many are left and how many the linked chests hold, and
  *   what is locked;</li>
  *   <li>the <b>crosshair hint</b>: small text without a background just left of the crosshair, saying what a wrong
- *   block should be or which block a ghost is.</li>
+ *   block should be or which block a ghost is;</li>
+ *   <li>the <b>tool panel</b>, bottom right by default, in the same frame while the selection tool is in hand: its mode,
+ *   what that does, and the tool's controls.</li>
  * </ul>
  */
 public final class Hud {
@@ -69,13 +73,17 @@ public final class Hud {
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui || mc.player == null || mc.screen instanceof io.blockcompanion.client.screen.HudEditorScreen) return;
         ClientConfig config = BlockCompanionClient.config();
+        HudLayout layout = config.hud;
+        // The tool panel doesn't need a schematic: the selection tool works without one.
+        if (BlockCompanionClient.toolPanelShown() && SelectionTool.holding(mc.player)) {
+            drawPanel(g, mc.font, layout.get(HudLayout.Element.TOOL), toolRows(config));
+        }
         LoadedPlacement lp = BlockCompanionClient.focus();
         if (lp == null) {
             List<LoadedPlacement> shown = BlockCompanionClient.shownHere();
             if (!shown.isEmpty()) lp = shown.get(shown.size() - 1);
         }
         if (lp == null) return;
-        HudLayout layout = config.hud;
         if (config.progressHud && layout.get(HudLayout.Element.PANEL).enabled()) drawPanel(g, mc.font, layout.get(HudLayout.Element.PANEL), rows(mc, lp));
         if (config.crosshairHint && layout.get(HudLayout.Element.HINT).enabled()) {
             Hint h = hint(mc, easy);
@@ -126,6 +134,8 @@ public final class Hud {
             }
         }
 
+        String auto = BlockCompanionClient.easyPlace().autoStatus();
+        if (auto != null) rows.add(Row.text(auto, auto.equals("Auto place on") ? GREEN : GREY));
         List<String> status = new ArrayList<>();
         if (!lp.locks.isEmpty()) status.add(PlacementLock.describe(lp.locks));
         if (!lp.visible) status.add("hidden");
@@ -190,6 +200,38 @@ public final class Hud {
         }
         g.pose().popPose();
         return new int[]{tl[0], tl[1], w, h};
+    }
+
+    // ---- the tool panel -------------------------------------------------------------------------------------------
+
+    /** The tool panel: the tool and its mode, what the mode does, then the controls that are switched on. */
+    static List<Row> toolRows(ClientConfig config) {
+        ToolMode m = config.toolMode;
+        List<Row> rows = new ArrayList<>();
+        ItemStack tool = stack(config.toolItem);
+        rows.add(new Row(tool.isEmpty() ? new ItemStack(net.minecraft.world.item.Items.STICK) : tool, "Tool: " + m.label, WHITE, -1,
+                (m.ordinal() + 1) + "/" + ToolMode.values().length));
+        rows.add(Row.text(m.hint, 0xFFE0E8FF));
+        if (m != ToolMode.MOVE && BlockCompanionClient.selectionLookedAt()) rows.add(Row.text("The selection can only be moved", YELLOW));
+        for (String c : controls(config)) rows.add(Row.text(c, GREY));
+        return rows;
+    }
+
+    /** "Shift+scroll: move", "Ctrl+scroll: turn 90°"...: the tool's controls, those switched off left out. */
+    private static List<String> controls(ClientConfig config) {
+        ClientConfig.Modifier move = config.moveModifier, turn = config.rotateModifier;
+        List<String> out = new ArrayList<>();
+        if (move != ClientConfig.Modifier.NONE) out.add(move.label() + "+scroll: " + config.toolMode.verb);
+        if (turn != ClientConfig.Modifier.NONE && turn != move) out.add(turn.label() + "+scroll: turn 90°");
+        if (move != ClientConfig.Modifier.NONE && turn != ClientConfig.Modifier.NONE && turn != move) {
+            out.add(turn.label() + "+" + move.label() + "+scroll: switch mode");
+        }
+        if (!io.blockcompanion.client.Keys.VIEW.isUnbound()) out.add(BlockCompanionClient.keyName("view") + ": cycle views");
+        if (config.cornerModifier != ClientConfig.Modifier.NONE) out.add(config.cornerModifier.label() + "+left / right-click: corners");
+        if (config.clearModifier != ClientConfig.Modifier.NONE) out.add(config.clearModifier.label() + "+right-click: clear selection");
+        if (config.linkModifier != ClientConfig.Modifier.NONE) out.add(config.linkModifier.label() + "+right-click a chest: link it");
+        if (!io.blockcompanion.client.Keys.UNDO.isUnbound()) out.add("Ctrl+" + BlockCompanionClient.keyName("undo") + ": undo");
+        return out;
     }
 
     // ---- the crosshair hint ---------------------------------------------------------------------------------------

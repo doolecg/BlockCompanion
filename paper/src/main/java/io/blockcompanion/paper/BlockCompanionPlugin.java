@@ -18,6 +18,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
@@ -36,7 +37,8 @@ import java.util.UUID;
  * Server side of BlockCompanion for Paper, Spigot and Bukkit: the shared space (uploads, shared placements, locks) over
  * plugin messaging on {@code blockcompanion:main}, speaking the same protocol as the Fabric and NeoForge mods. Only the
  * Bukkit API is used. Permissions are the nodes {@code blockcompanion.use/upload/place/lock/admin} (see plugin.yml).
- * Linked chests are read and emptied through {@link PaperChestAccess}, and the BlockDesigner link lets Resource Tracker
+ * Linked chests are read and emptied through {@link PaperChestAccess} (and read again when a player closes one), AutoBuild places blocks through
+ * {@link PaperBuildWorld} (who may start it: {@code blockcompanion.autobuild}), and the BlockDesigner link lets Resource Tracker
  * on the same computer send projects straight into the shared space.
  */
 public final class BlockCompanionPlugin extends JavaPlugin implements PluginMessageListener, Listener {
@@ -69,6 +71,7 @@ public final class BlockCompanionPlugin extends JavaPlugin implements PluginMess
         }
         sync = new SyncServer(store, config, "BlockCompanion-Paper " + getDescription().getVersion(), System::currentTimeMillis, log);
         sync.setChestAccess(new PaperChestAccess(), new ChestLinkStore(store.root().resolve("chests.json")));
+        sync.setBuildWorld(new PaperBuildWorld());
         link = new GameLink(store.root().resolve("incoming"), InstanceInfo.defaultFolder(), InstanceInfo.SERVER, getServer().getMotd(),
                 getServer().getBukkitVersion().split("-")[0], "paper", getDescription().getVersion(), getServer().getWorldContainer().toPath(), new ServerGame(), getLogger()::info);
         link.start();
@@ -97,6 +100,12 @@ public final class BlockCompanionPlugin extends JavaPlugin implements PluginMess
     public void onPluginMessageReceived(String channel, Player player, byte[] message) {
         if (!Protocol.CHANNEL.equals(channel) || sync == null) return;
         sync.receive(new PaperPeer(player), message);
+    }
+
+    /** A closed container: a linked chest is read once now (nothing polls the chests). */
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent e) {
+        if (sync != null) PaperChestAccess.closed(sync, e.getInventory());
     }
 
     @EventHandler

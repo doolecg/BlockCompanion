@@ -28,7 +28,7 @@ class ChestSyncTest {
     SyncServerTest.FakePeer alice;
 
     /** Containers as position to contents; players' inventories as item counts. */
-    static final class FakeWorld implements ChestAccess {
+    static class FakeWorld implements ChestAccess {
         final Map<String, Map<String, Long>> containers = new HashMap<>();
         final Map<UUID, Map<String, Long>> inventories = new HashMap<>();
         int room = Integer.MAX_VALUE;
@@ -52,6 +52,17 @@ class ChestSyncTest {
             else c.put(item, have - n);
             inventories.computeIfAbsent(player, k -> new HashMap<>()).merge(item, (long) n, Long::sum);
             room -= n;
+            return n;
+        }
+
+        public int remove(String dimension, int x, int y, int z, String item, int count) {
+            Map<String, Long> c = containers.get(key(dimension, x, y, z));
+            if (c == null) return 0;
+            long have = c.getOrDefault(item, 0L);
+            int n = (int) Math.min(have, count);
+            if (n <= 0) return 0;
+            if (have - n == 0) c.remove(item);
+            else c.put(item, have - n);
             return n;
         }
     }
@@ -113,19 +124,96 @@ class ChestSyncTest {
         assertThat(alice.last(Message.ChestContents.class).entries()).isEmpty();
     }
 
+    /** A container that counts how often it is read. */
+    static final class CountingWorld extends FakeWorld {
+        int reads;
+
+        @Override
+        public Map<String, Long> contents(String dimension, int x, int y, int z) {
+            reads++;
+            return super.contents(dimension, x, y, z);
+        }
+    }
+
     @Test
-    void tickSendsOnlyChanges() {
+    void chestsAreReadOnEventsNotEveryTick() throws IOException {
+        CountingWorld counting = new CountingWorld();
+        world = counting;
+        server = newServer();
         chest(1, Map.of("minecraft:stone", 10L));
         send(alice, new Message.Hello(Protocol.VERSION, "client", 0));
         send(alice, new Message.ChestLink("minecraft:overworld", 1, 64, 0, true));
         int before = alice.all(Message.ChestContents.class).size();
-        for (int i = 0; i < SyncServer.CHEST_REFRESH_TICKS; i++) server.tick();
+        int reads = counting.reads;
+
+        // Changed in the world without anyone closing it: not read, nothing sent.
+        chest(1, Map.of("minecraft:stone", 3L));
+        for (int i = 0; i < 10 * SyncServer.CHEST_REFRESH_TICKS; i++) server.tick();
+        assertThat(counting.reads).isEqualTo(reads);
         assertThat(alice.all(Message.ChestContents.class)).hasSize(before);
 
-        chest(1, Map.of("minecraft:stone", 3L));
-        for (int i = 0; i < SyncServer.CHEST_REFRESH_TICKS; i++) server.tick();
+        // A player closed it: read once, and the new contents go out.
+        server.chestChanged("minecraft:overworld", 1, 64, 0);
+        assertThat(counting.reads).isEqualTo(reads + 1);
         assertThat(alice.all(Message.ChestContents.class)).hasSize(before + 1);
         assertThat(alice.last(Message.ChestContents.class).entries().get(0).items()).containsEntry("minecraft:stone", 3L);
+
+        // Closed again with nothing changed, or a chest nobody linked: nothing sent.
+        server.chestChanged("minecraft:overworld", 1, 64, 0);
+        server.chestChanged("minecraft:overworld", 9, 64, 0);
+        assertThat(counting.reads).isEqualTo(reads + 2);
+        assertThat(alice.all(Message.ChestContents.class)).hasSize(before + 1);
+        assertThat(server.linkedChests()).containsExactly(new LinkedChests.Pos("minecraft:overworld", 1, 64, 0));
+    }
+
+    @Test
+    void closingAChestThatIsntLoadedKeepsWhatWasKnown() throws IOException {
+        CountingWorld counting = new CountingWorld();
+        world = counting;
+        server = newServer();
+        chest(1, Map.of("minecraft:stone", 10L));
+        send(alice, new Message.Hello(Protocol.VERSION, "client", 0));
+        send(alice, new Message.ChestLink("minecraft:overworld", 1, 64, 0, true));
+        int lists = alice.all(Message.ChestContents.class).size();
+
+        // Its chunk unloaded (or it was broken): the close reads nothing, nothing goes out, and a restock still counts it.
+        counting.containers.clear();
+        server.chestChanged("minecraft:overworld", 1, 64, 0);
+        assertThat(alice.all(Message.ChestContents.class)).hasSize(lists);
+        assertThat(alice.last(Message.ChestContents.class).entries().get(0).items()).containsEntry("minecraft:stone", 10L);
+    }
+
+    @Test
+    void aRestockSendsTheListOnceAndTicksSendNothingMore() throws IOException {
+        CountingWorld counting = new CountingWorld();
+        world = counting;
+        server = newServer();
+        chest(1, Map.of("minecraft:stone", 100L));
+        send(alice, new Message.Hello(Protocol.VERSION, "client", 0));
+        send(alice, new Message.ChestLink("minecraft:overworld", 1, 64, 0, true));
+        send(alice, new Message.ChestRestock("minecraft:stone", 10));
+        int lists = alice.all(Message.ChestContents.class).size();
+        int reads = counting.reads;
+
+        for (int i = 0; i < 10 * SyncServer.CHEST_REFRESH_TICKS; i++) server.tick();
+        assertThat(alice.all(Message.ChestContents.class)).hasSize(lists);
+        assertThat(counting.reads).isEqualTo(reads);
+        assertThat(alice.last(Message.ChestContents.class).entries().get(0).items()).containsEntry("minecraft:stone", 90L);
+    }
+
+    @Test
+    void restockSubtractsWithoutReadingAgain() throws IOException {
+        CountingWorld counting = new CountingWorld();
+        world = counting;
+        server = newServer();
+        chest(1, Map.of("minecraft:stone", 100L));
+        send(alice, new Message.Hello(Protocol.VERSION, "client", 0));
+        send(alice, new Message.ChestLink("minecraft:overworld", 1, 64, 0, true));
+        int reads = counting.reads;
+
+        send(alice, new Message.ChestRestock("minecraft:stone", 64));
+        assertThat(counting.reads).isEqualTo(reads);
+        assertThat(alice.last(Message.ChestContents.class).entries().get(0).items()).containsEntry("minecraft:stone", 36L);
     }
 
     @Test

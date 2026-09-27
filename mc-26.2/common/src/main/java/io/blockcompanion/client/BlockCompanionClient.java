@@ -53,7 +53,9 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The client side of BlockCompanion, shared by Fabric and NeoForge. The platform entry points forward ticks, world
@@ -87,9 +89,13 @@ public final class BlockCompanionClient {
     private static LoadedPlacement active;
     /** The placement following a shared one on the server, if any. */
     private static LoadedPlacement sharedLink;
+    /** Placements sent to BlockDesigner with Edit in BlockDesigner, by slot, until the app answers. */
+    private static final Map<Integer, LoadedPlacement> EDITS = new HashMap<>();
     /** The placement whose box the player's view ray meets this frame, and where; null when none. */
     private static LoadedPlacement hovered;
     private static RayBox.Hit hover;
+    /** Where the view ray meets the save selection's box this frame when that box is the one looked at; else null. */
+    private static RayBox.Hit selectionHover;
 
     private static Level lastLevel;
     private static String worldKey;
@@ -97,13 +103,12 @@ public final class BlockCompanionClient {
     private static int ticksSinceChange;
     private static double scrollRemainder;
     /** The placement the player changed last: what undo and redo act on. */
-    /** Undo and redo across every placement, in the order the changes were made. */
-    private static final UndoTimeline<LoadedPlacement> UNDO = new UndoTimeline<>(lp -> lp.history);
-    /** "Only this one" in the tool's show / hide mode: the placement shown alone, and the ones it hid. */
+    /** Undo and redo across every placement and the selection's moves, in the order the changes were made. */
+    private static final UndoTimeline<Object> UNDO = new UndoTimeline<>(t -> t == SELECTION ? SELECTION.history() : ((LoadedPlacement) t).history);
+    /** "Only this one" in the view cycle (the view key): the placement shown alone, and the ones it hid. */
     private static LoadedPlacement soloOwner;
     private static final List<LoadedPlacement> SOLO_HIDDEN = new ArrayList<>();
-    /** Whether the tool was in hand last tick (its mode is shown when it is taken), and when the last hint showed. */
-    private static boolean wasHolding;
+    /** When the last hint showed. */
     private static long lastHint;
 
     private BlockCompanionClient() {
@@ -222,6 +227,13 @@ public final class BlockCompanionClient {
         return out;
     }
 
+    /** Placements in the player's dimension, shown or hidden. */
+    private static List<LoadedPlacement> hereAll() {
+        List<LoadedPlacement> out = new ArrayList<>();
+        for (LoadedPlacement lp : PLACEMENTS) if (here(lp)) out.add(lp);
+        return out;
+    }
+
     /** True if something is loaded and shown in the player's dimension. */
     public static boolean activeHere() {
         return !shownHere().isEmpty();
@@ -322,6 +334,18 @@ public final class BlockCompanionClient {
             changed(f);
             actionBar(f.placement.mirrored() ? "Mirrored" : "Not mirrored");
         }
+        while (Keys.VIEW.consumeClick()) {
+            // The looked-at placement (or the selected one: a hidden one is brought back this way).
+            LoadedPlacement f = focus();
+            if (f == null) {
+                actionBar(PLACEMENTS.isEmpty() ? "No schematic loaded" : "Look at a schematic's box to change its view");
+                continue;
+            }
+            View v = cycleView(f, 1);
+            active = f;
+            changed(f);
+            actionBar(f.shortName() + ": " + v.label);
+        }
         while (Keys.LAYER_UP.consumeClick()) stepLayer(1);
         while (Keys.LAYER_DOWN.consumeClick()) stepLayer(-1);
         while (Keys.EASY_PLACE.consumeClick()) {
@@ -329,6 +353,14 @@ public final class BlockCompanionClient {
             config.save(configFile);
             if (config.easyPlace && !EasyPlace.serverAllows()) actionBar("Easy place is switched off on this server");
             else actionBar(config.easyPlace ? "Easy place on: right-click a ghost with its block" : "Easy place off");
+        }
+        while (Keys.EASY_PLACE_AUTO.consumeClick()) {
+            config.easyPlaceAuto = !config.easyPlaceAuto;
+            config.save(configFile);
+            if (!config.easyPlaceAuto) actionBar("Auto place off");
+            else if (!EasyPlace.serverAllows() || !EasyPlace.autoServerAllows()) actionBar("Auto place is switched off on this server");
+            else if (!config.easyPlace) actionBar("Auto place on, but easy place is off (" + keyName("easy_place") + ")");
+            else actionBar("Auto place on: missing blocks in reach place themselves");
         }
         while (Keys.LAYER_MODE.consumeClick()) {
             LoadedPlacement f = focus();
@@ -338,10 +370,6 @@ public final class BlockCompanionClient {
             changed(f);
             actionBar(f.layers.mode() == Layers.Mode.SINGLE ? "Single layer" : "Layers build up");
         }
-
-        boolean holding = SelectionTool.holding(mc.player);
-        if (holding && !wasHolding && activeHere()) actionBar(modeMessage());
-        wasHolding = holding;
 
         tickProgress(mc);
         ChestTracker.get().tick(mc);
@@ -486,6 +514,7 @@ public final class BlockCompanionClient {
     public static boolean onUseItem() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return false;
+        if (SelectionTool.onClear(mc)) return true;
         long now = System.currentTimeMillis();
         if (mc.hitResult instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK) {
             net.minecraft.core.BlockPos p = hit.getBlockPos();
@@ -537,6 +566,11 @@ public final class BlockCompanionClient {
 
     public static EasyPlace easyPlace() {
         return EASY;
+    }
+
+    /** Easy place's auto mode clicked a cell: the change there is the player's own (effects, wrong-block note). */
+    public static void noteOwnClick(net.minecraft.core.BlockPos p) {
+        OWN.clicked(p.getX(), p.getY(), p.getZ(), System.currentTimeMillis());
     }
 
     /**
@@ -865,6 +899,58 @@ public final class BlockCompanionClient {
         }
     }
 
+    /**
+     * Edit in BlockDesigner: sends the placement's schematic file to the app, which opens it as its project and answers
+     * with that project for this placement to follow ({@link #onProjectLinked}).
+     */
+    public static void editInBlockDesigner(LoadedPlacement lp) {
+        if (ClientLink.state() != ClientLink.State.CONNECTED) {
+            actionBar("BlockDesigner isn't connected: open Resource Tracker's Game link there and connect to this game");
+            return;
+        }
+        try {
+            if (!ClientLink.edit(lp.slot, library.resolve(lp.name()), lp.shortName())) return;
+        } catch (IOException e) {
+            LOG.warn("Could not send {} to BlockDesigner", lp.name(), e);
+            actionBar("Could not send " + lp.shortName() + " to BlockDesigner: " + e.getMessage());
+            return;
+        }
+        EDITS.put(lp.slot, lp);
+        actionBar("Opening " + lp.shortName() + " in BlockDesigner...");
+    }
+
+    /**
+     * BlockDesigner answered an edit with its project, saved in the library: the placement that was sent switches to it
+     * (keeping where it is, how it's turned, its locks and layer view) and follows BlockDesigner from now on. When that
+     * placement is gone (unloaded, another world) it is handled like a project the user sent.
+     */
+    public static void onProjectLinked(String libraryName, int slot, String app) {
+        LoadedPlacement lp = EDITS.remove(slot);
+        if (lp == null || !PLACEMENTS.contains(lp)) {
+            onProjectReceived(libraryName, true, app);
+            return;
+        }
+        String error = reload(lp, libraryName);
+        if (error != null) {
+            actionBar(error);
+            return;
+        }
+        lp.live = true;
+        ClientLink.statusChanged();
+        // Other placements already following that project get the new version too.
+        for (LoadedPlacement other : List.copyOf(PLACEMENTS)) {
+            if (other != lp && other.live && other.name().equalsIgnoreCase(libraryName)) reload(other, libraryName);
+        }
+        actionBar(lp.shortName() + " now follows BlockDesigner: changes made there show up here");
+    }
+
+    /** An app reported an error; about an edit when {@code slot} is one that was sent. */
+    public static void onLinkError(String app, String message, int slot) {
+        LoadedPlacement lp = slot < 0 ? null : EDITS.remove(slot);
+        if (lp != null) actionBar(app + " couldn't open " + lp.shortName() + ": " + message);
+        else actionBar(app + ": " + message);
+    }
+
     /** The placement following a shared one on the server, or null. */
     public static LoadedPlacement sharedLink() {
         return sharedLink != null && PLACEMENTS.contains(sharedLink) ? sharedLink : null;
@@ -877,72 +963,84 @@ public final class BlockCompanionClient {
     // ---- input ----------------------------------------------------------------------------------------------------
 
     /**
-     * Mouse wheel, from the mixin. Returns true to swallow the scroll (no hotbar change). Placements are only moved, turned
-     * and mirrored with the selection tool in hand ({@code tool.requiredToMove}); without it the wheel changes the hotbar
-     * slot as usual.
+     * Mouse wheel, from the mixin. Returns true to swallow the scroll (no hotbar change). Plain scrolling always changes
+     * the hotbar slot; placements are only moved, turned and mirrored with the selection tool in hand
+     * ({@code tool.requiredToMove}).
      *
      * <ul>
-     *   <li>mode modifier (Shift) + scroll, tool in hand: steps through the tool's modes ({@link ToolMode});</li>
-     *   <li>move modifier (Alt) + scroll while looking at a box: moves it one block per notch along the axis of the face
-     *   looked at (up pushes it away, down pulls it closer);</li>
-     *   <li>turn modifier (Ctrl) + scroll while looking at a box: turns it 90 degrees (up = clockwise);</li>
-     *   <li>plain scroll, tool in hand, looking at a box: what the tool's mode says.</li>
+     *   <li>move modifier (Shift) + scroll while looking at a box: what the tool's mode says ({@link ToolMode}): moves it
+     *   one block per notch along the axis of the face looked at (up pushes it away, down pulls it closer), or mirrors
+     *   it;</li>
+     *   <li>turn modifier (Ctrl) + scroll while looking at a placement's box: turns it 90 degrees (up = clockwise),
+     *   whatever the mode;</li>
+     *   <li>the save selection's box, when that is the one looked at (nearer than any placement's): only moves, both
+     *   corners together;</li>
+     *   <li>both modifiers (Ctrl+Shift) + scroll, tool in hand: switches the mode.</li>
      * </ul>
      */
     public static boolean onScroll(double yOffset) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.gui.screen() != null || mc.player == null) return false;
         boolean holding = SelectionTool.holding(mc.player);
-        if (holding && held(mc, config.modeModifier)) {
+        boolean move = held(mc, config.moveModifier), turn = held(mc, config.rotateModifier);
+        if (move && turn && config.moveModifier != config.rotateModifier) {
+            if (!holding && !toolFree()) return false;
             int n = notches(yOffset);
             if (n != 0) {
                 // Down steps forward, like the hotbar.
                 config.toolMode = config.toolMode.next(-n);
                 config.save(configFile);
-                actionBar(modeMessage());
+                // The tool panel shows the new mode; without it, a short line above the hotbar does.
+                if (!holding || !toolPanelShown()) actionBar("Tool: " + config.toolMode.label + " (" + config.moveModifier.label() + "+scroll)");
             }
             return true;
         }
-        boolean move = held(mc, config.moveModifier), rotate = !move && held(mc, config.rotateModifier);
-        if (move || rotate) {
-            if (hovered == null || hover == null) return false;
-            if (!holding && !toolFree()) {
-                hint("Hold the " + toolName() + " to " + (move ? "move" : "turn") + " it");
-                return false;
-            }
-            return scrollAction(hovered, move ? ToolMode.MOVE : ToolMode.ROTATE, yOffset);
+        if (!move && !turn) return false;
+        boolean onSelection = selectionHover != null, onPlacement = hovered != null && hover != null;
+        if (!onSelection && !onPlacement) return false;
+        if (!holding && !toolFree()) {
+            hint("Hold the " + toolName() + " to " + (move ? config.toolMode.verb : "turn") + " it");
+            return false;
         }
-        if (!holding) return false;
-        LoadedPlacement lp = hovered != null && hover != null ? hovered : null;
-        // A hidden placement has no box to look at: the show / hide mode can still bring the selected one back.
-        if (lp == null && config.toolMode == ToolMode.VISIBILITY && active != null && !active.visible && here(active)) lp = active;
-        if (lp == null) return false;
-        return scrollAction(lp, config.toolMode, yOffset);
+        if (onSelection) return scrollSelection(move && config.toolMode == ToolMode.MOVE, yOffset);
+        return scrollAction(hovered, !move ? ScrollAction.TURN : config.toolMode == ToolMode.MIRROR ? ScrollAction.MIRROR : ScrollAction.MOVE, yOffset);
     }
 
-    /** One scroll's worth of {@code mode} on a placement; always swallows the scroll. */
-    private static boolean scrollAction(LoadedPlacement lp, ToolMode mode, double yOffset) {
-        PlacementLock lock = switch (mode) {
+    /** What one scroll does to a placement. */
+    private enum ScrollAction {
+        MOVE, TURN, MIRROR
+    }
+
+    /** Whether the tool panel is switched on (in the settings and in the HUD editor). */
+    public static boolean toolPanelShown() {
+        return config.toolHud && config.hud.get(io.blockcompanion.core.hud.HudLayout.Element.TOOL).enabled();
+    }
+
+    /** True when the save selection is the box looked at this frame (the move modifier + scroll moves it). */
+    public static boolean selectionLookedAt() {
+        return selectionHover != null;
+    }
+
+    /** One scroll's worth of {@code action} on a placement; always swallows the scroll. */
+    private static boolean scrollAction(LoadedPlacement lp, ScrollAction action, double yOffset) {
+        PlacementLock lock = switch (action) {
             case MOVE -> PlacementLock.POSITION;
-            case ROTATE -> PlacementLock.ROTATION;
+            case TURN -> PlacementLock.ROTATION;
             case MIRROR -> PlacementLock.MIRROR;
-            case LAYER -> PlacementLock.LAYERS;
-            case VISIBILITY -> null;
         };
-        if (lock != null && refuse(lp, lock)) return true;
+        if (refuse(lp, lock)) return true;
         int notches = notches(yOffset);
         if (notches == 0) return true;
-        switch (mode) {
+        switch (action) {
             case MOVE -> {
                 if (lp != hovered || hover == null) return true;
                 // Push along the look direction into the face: opposite to the face's outward normal.
-                int dir = hover.inside() ? hover.sign() : -hover.sign();
-                int d = dir * notches;
-                lp.placement.move(hover.axis() == 0 ? d : 0, hover.axis() == 1 ? d : 0, hover.axis() == 2 ? d : 0);
+                BlockPos d = hover.push(notches);
+                lp.placement.move(d.x(), d.y(), d.z());
                 Box b = lp.placement.worldBox();
                 actionBar("Moved to " + b.minX() + ", " + b.minY() + ", " + b.minZ());
             }
-            case ROTATE -> {
+            case TURN -> {
                 lp.placement.rotate(notches > 0 ? 1 : -1);
                 actionBar("Rotated " + lp.placement.rotation() * 90 + "°");
             }
@@ -950,19 +1048,29 @@ public final class BlockCompanionClient {
                 lp.placement.toggleMirror();
                 actionBar(lp.placement.mirrored() ? "Mirrored" : "Not mirrored");
             }
-            case LAYER -> {
-                lp.layers.step(notches > 0 ? 1 : -1, lp.placement.localSizeY());
-                actionBar(lp.layers.showsAll() ? "All layers"
-                        : (lp.layers.mode() == Layers.Mode.SINGLE ? "Layer " : "Layers up to ") + (lp.layers.level() + 1) + " of " + lp.placement.localSizeY());
-            }
-            case VISIBILITY -> {
-                // Down hides more, up shows more.
-                View v = cycleView(lp, notches > 0 ? -1 : 1);
-                actionBar(lp.shortName() + ": " + v.label);
-            }
         }
         active = lp;
         changed(lp);
+        return true;
+    }
+
+    /**
+     * One scroll on the save selection, looked at: with {@code move} (the move modifier in Move mode) it shifts both
+     * corners like a placement (same direction, one block per notch) and is an undo step; turning and mirroring don't
+     * apply to it. Always swallows the scroll.
+     */
+    private static boolean scrollSelection(boolean move, double yOffset) {
+        int notches = notches(yOffset);
+        if (notches == 0 || selectionHover == null) return true;
+        if (!move) {
+            hint("The selection can only be moved");
+            return true;
+        }
+        PlacementHistory.State before = SELECTION.state();
+        if (!SELECTION.move(selectionHover.push(notches))) return true;
+        UNDO.record(SELECTION, before, SELECTION.state(), System.currentTimeMillis());
+        Box b = SELECTION.box().orElseThrow();
+        actionBar("Selection moved to " + b.minX() + ", " + b.minY() + ", " + b.minZ());
         return true;
     }
 
@@ -974,7 +1082,8 @@ public final class BlockCompanionClient {
         return n;
     }
 
-    private static boolean held(Minecraft mc, ClientConfig.Modifier m) {
+    /** Whether modifier {@code m} is held down (never for {@code NONE}). */
+    public static boolean held(Minecraft mc, ClientConfig.Modifier m) {
         if (m == ClientConfig.Modifier.NONE) return false;
         return com.mojang.blaze3d.platform.InputConstants.isKeyDown(mc.getWindow(), m.left)
                 || com.mojang.blaze3d.platform.InputConstants.isKeyDown(mc.getWindow(), m.right);
@@ -1010,22 +1119,9 @@ public final class BlockCompanionClient {
         actionBar(message);
     }
 
-    /** "Tool: Move, scroll pushes it..." with how to switch modes and undo. */
-    private static String modeMessage() {
-        ToolMode m = config.toolMode;
-        List<String> tips = new ArrayList<>();
-        if (config.modeModifier != ClientConfig.Modifier.NONE) tips.add(modifierName(config.modeModifier) + "+scroll: mode");
-        if (!Keys.UNDO.isUnbound()) tips.add("Ctrl+" + keyName("undo") + ": undo");
-        return "Tool: " + m.label + ", " + m.hint + (tips.isEmpty() ? "" : " (" + String.join(", ", tips) + ")");
-    }
+    // ---- view cycle ------------------------------------------------------------------------------------------------
 
-    private static String modifierName(ClientConfig.Modifier m) {
-        return m.name().charAt(0) + m.name().substring(1).toLowerCase(java.util.Locale.ROOT);
-    }
-
-    // ---- show / hide cycle ----------------------------------------------------------------------------------------
-
-    /** The ways to show a placement that the tool's show / hide mode steps through, most shown first. */
+    /** The ways to show a placement that the view key steps through, most shown first. */
     private enum View {
         ALL("everything"),
         BUILD_UP("layers up to this one"),
@@ -1107,7 +1203,8 @@ public final class BlockCompanionClient {
     // ---- undo and redo --------------------------------------------------------------------------------------------
 
     /**
-     * A key press in the world, from the mixin: Ctrl + the undo key undoes the last change to any placement, Ctrl + the
+     * A key press in the world, from the mixin: Ctrl + the undo key undoes the last change to any placement (or the last
+     * move of the selection), Ctrl + the
      * redo key or Ctrl+Shift + the undo key redoes it, like an ordinary program. Returns true when the key was taken.
      */
     public static boolean onUndoKey(boolean undoKey, boolean redoKey, boolean control, boolean shift) {
@@ -1119,13 +1216,21 @@ public final class BlockCompanionClient {
 
     /** Undoes (or redoes) the last change, whichever placement it was on; says what happened. */
     public static void undo(boolean redo) {
-        UndoTimeline.Result<LoadedPlacement> r = redo ? UNDO.redo(LoadedPlacement::state) : UNDO.undo(LoadedPlacement::state);
+        java.util.function.Function<Object, PlacementHistory.State> state = t -> t == SELECTION ? SELECTION.state() : ((LoadedPlacement) t).state();
+        UndoTimeline.Result<Object> r = redo ? UNDO.redo(state) : UNDO.undo(state);
         if (r == null) {
             actionBar(redo ? "Nothing to redo" : "Nothing to undo");
             return;
         }
-        LoadedPlacement lp = r.target();
         PlacementHistory.Step step = r.step();
+        if (r.target() == SELECTION) {
+            // The selection has no locks: its moves always apply.
+            SELECTION.apply(step.target());
+            int left = redo ? UNDO.redoSize() : UNDO.undoSize();
+            actionBar((redo ? "Redid " : "Undid ") + step.kind().label + " of the selection" + (left > 0 ? " (" + left + " more)" : ""));
+            return;
+        }
+        LoadedPlacement lp = (LoadedPlacement) r.target();
         if (!step.applied()) {
             actionBar(lp.shortName() + ": can't " + (redo ? "redo" : "undo") + " the " + step.kind().label + ", " + step.blockedBy().label
                     + " is locked (" + keyName("lock") + " or the schematic list unlocks it)");
@@ -1151,24 +1256,24 @@ public final class BlockCompanionClient {
         Minecraft mc = Minecraft.getInstance();
         // Boxes (selection and placements) show while the selection tool is held, or always, per the settings.
         boolean boxes = BoxRenderer.frame() > 0;
-        if (boxes && !SELECTION.isEmpty() && camera != null && camera.pos != null && mc.level != null
-                && dimensionId(mc.level).equals(SELECTION.dimension())) {
-            SELECTION_RENDER.submit(SELECTION.box().orElseThrow(), collector, poseStack, camera.pos,
-                    Vec3.directionFromRotation(camera.xRot, camera.yRot));
-        }
+        Box selBox = boxes && !SELECTION.isEmpty() && mc.level != null && dimensionId(mc.level).equals(SELECTION.dimension())
+                ? SELECTION.box().orElseThrow() : null;
         List<LoadedPlacement> shown = shownHere();
         for (LoadedPlacement lp : PLACEMENTS) if (!shown.contains(lp)) lp.ghosts.clear();
         if (camera == null || camera.pos == null) {
             hovered = null;
             hover = null;
+            selectionHover = null;
             return;
         }
         Vec3 cam = camera.pos;
         Vec3 look = Vec3.directionFromRotation(camera.xRot, camera.yRot);
         // The looked-at box: the nearest one the view ray enters; standing inside, the selected one wins, else the smallest.
+        // Hidden placements count while the boxes show (their box is drawn then), so the tool and the keys still reach them.
+        List<LoadedPlacement> targets = boxes ? hereAll() : shown;
         LoadedPlacement best = null;
         RayBox.Hit bestHit = null;
-        for (LoadedPlacement lp : shown) {
+        for (LoadedPlacement lp : targets) {
             RayBox.Hit h = RayBox.intersect(cam.x, cam.y, cam.z, look.x, look.y, look.z, lp.placement.worldBox(), config.reach);
             if (h == null) continue;
             if (best == null || better(h, lp, bestHit, best)) {
@@ -1178,6 +1283,11 @@ public final class BlockCompanionClient {
         }
         hovered = best;
         hover = bestHit;
+        // The selection is the box looked at when it is nearer than the placement's (see RayBox.before); a hidden placement
+        // loses to it, as to a shown one. Only its box then gets the brighter face.
+        RayBox.Hit selHit = selBox == null ? null : RayBox.intersect(cam.x, cam.y, cam.z, look.x, look.y, look.z, selBox, config.reach);
+        selectionHover = selHit != null && (best == null || !best.visible || RayBox.before(selHit, selBox.volume(), bestHit, volume(best))) ? selHit : null;
+        if (selBox != null) SELECTION_RENDER.submit(selBox, selectionHover != null, collector, poseStack, cam, look);
         EasyPlace.Target t = EASY.enabled() ? EASY.target() : null;
         for (LoadedPlacement lp : shown) {
             lp.ghosts.setTarget(t != null && t.owner() == lp ? t.pos() : null);
@@ -1185,21 +1295,26 @@ public final class BlockCompanionClient {
             lp.ghosts.submit(lp.placement, lp.layers, collector, poseStack, cam, camera.cullFrustum, camera);
             if (boxes) submitBox(lp, cam, look, collector, poseStack);
         }
+        if (boxes) for (LoadedPlacement lp : targets) if (!lp.visible) submitBox(lp, cam, look, collector, poseStack);
     }
 
     /** A placement's box: locked ones stay blue, then looked at, selected, and the rest faint grey. */
     private static void submitBox(LoadedPlacement lp, Vec3 cam, Vec3 look, SubmitNodeCollector collector, PoseStack poseStack) {
         Palette colors = config.colors;
         boolean locked = lp.locks.containsAll(PlacementLock.IN_PLACE);
+        // Looking at the selection in front of it, the placement isn't the box looked at.
+        boolean looked = lp == hovered && selectionHover == null;
         int rgb = locked ? colors.get(Palette.Entry.BOX_LOCKED)
-                : lp == hovered ? colors.get(Palette.Entry.BOX_HOVER)
+                : looked ? colors.get(Palette.Entry.BOX_HOVER)
                 : lp == active ? colors.get(Palette.Entry.BOX) : BoxLook.OTHER_RGB;
-        double alpha = locked || lp == hovered || lp == active ? BoxLook.EDGE_ALPHA : BoxLook.EDGE_ALPHA_OTHER;
-        int face = lp == hovered && hover != null ? BoxLook.face(hover.axis(), hover.sign()) : -1;
-        BoxRenderer.submit(lp.placement.worldBox(), rgb, alpha, face, lp == hovered, collector, poseStack, cam);
+        double alpha = locked || looked || lp == active ? BoxLook.EDGE_ALPHA : BoxLook.EDGE_ALPHA_OTHER;
+        int face = looked && hover != null ? BoxLook.face(hover.axis(), hover.sign()) : -1;
+        BoxRenderer.submit(lp.placement.worldBox(), rgb, alpha, face, looked, collector, poseStack, cam);
     }
 
     private static boolean better(RayBox.Hit h, LoadedPlacement lp, RayBox.Hit other, LoadedPlacement otherLp) {
+        // A shown placement wins over a hidden one.
+        if (lp.visible != otherLp.visible) return lp.visible;
         if (h.inside() != other.inside()) return !h.inside();
         if (!h.inside()) return h.distance() < other.distance();
         if (lp == active) return true;

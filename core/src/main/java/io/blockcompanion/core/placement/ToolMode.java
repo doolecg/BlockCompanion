@@ -3,26 +3,27 @@ package io.blockcompanion.core.placement;
 import java.util.Locale;
 
 /**
- * What plain scrolling does while the selection tool is in hand and the player looks at a placement's box. The mode
- * modifier (Shift by default) plus scroll steps through them.
+ * What the move modifier (Shift by default) plus scroll does while the selection tool is in hand and the player looks at
+ * a placement's box (or the save selection, which only moves). Ctrl+Shift+scroll switches between them; the tool panel
+ * on the HUD shows the current one. Turning has its own modifier (Ctrl+scroll), and a placement's view (layers, only
+ * this one, hidden) its own key. Old saved modes (ROTATE, LAYER, VISIBILITY) load as {@link #MOVE}.
  */
 public enum ToolMode {
     /** Push the box away or pull it closer along the axis of the face looked at. */
-    MOVE("Move", "scroll pushes it away or pulls it closer"),
-    /** Turn it 90 degrees (up = clockwise). */
-    ROTATE("Turn", "scroll turns it 90°"),
+    MOVE("Move", "move", "Pushes the box away or pulls it closer"),
     /** Mirror it (any notch flips it). */
-    MIRROR("Mirror", "scroll flips it"),
-    /** Step the layer view up and down. */
-    LAYER("Layers", "scroll steps through the layers"),
-    /** Step through the ways to show it: everything, layers, one layer, only this one, hidden. */
-    VISIBILITY("Show / hide", "scroll changes what shows");
+    MIRROR("Mirror", "mirror", "Flips the box");
 
+    /** The mode's name, "Move". */
     public final String label;
+    /** What the scroll does, for a controls line: "Shift+scroll: move". */
+    public final String verb;
+    /** One line on what it does, sentence case, no full stop. */
     public final String hint;
 
-    ToolMode(String label, String hint) {
+    ToolMode(String label, String verb, String hint) {
         this.label = label;
+        this.verb = verb;
         this.hint = hint;
     }
 

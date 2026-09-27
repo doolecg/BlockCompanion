@@ -38,6 +38,19 @@ public final class GameLink implements AutoCloseable {
          */
         void projectReceived(String relative, Path file, String projectName, boolean open, String fromApp);
 
+        /**
+         * The app's answer to {@link #requestEdit}: the project now open in BlockDesigner, written like any other, for the
+         * placement in {@code slot} to switch to and follow. Games without placements take it as a project sent with
+         * {@code open}.
+         */
+        default void projectLinked(String relative, Path file, String projectName, int slot, String fromApp) {
+            projectReceived(relative, file, projectName, true, fromApp);
+        }
+
+        /** An app reported an error; {@code slot} is the placement it is about ({@link #requestEdit}), else -1. */
+        default void appError(String app, String message, int slot) {
+        }
+
         /** The world and packs for the instance file: a copy of {@code info} with them filled in. */
         InstanceInfo refresh(InstanceInfo info);
 
@@ -179,6 +192,25 @@ public final class GameLink implements AutoCloseable {
         return true;
     }
 
+    /**
+     * Sends a placement's schematic file to the connected apps to open in BlockDesigner ({@code edit}); the app answers
+     * with the project for that {@code slot} ({@link Game#projectLinked}) or an error ({@link Game#appError}). False when
+     * no app is connected.
+     */
+    public boolean requestEdit(int slot, Path file, String projectName) throws IOException {
+        if (!connected()) return false;
+        byte[] data = Files.readAllBytes(file);
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("type", "edit");
+        m.put("slot", slot);
+        m.put("file", file.getFileName().toString());
+        m.put("name", projectName);
+        m.put("sha256", Hashes.sha256(data));
+        m.put("data", Base64.getEncoder().encodeToString(data));
+        server.broadcast(m);
+        return true;
+    }
+
     /** Sends a message of the game's own to every app. */
     public void broadcast(Map<String, Object> message) {
         if (server != null) server.broadcast(message);
@@ -292,6 +324,12 @@ public final class GameLink implements AutoCloseable {
                     c.appStatus(Json.string(m.get("project"), ""), Json.bool(m.get("live"), false));
                     events.add(new Event(game::appsChanged));
                 }
+                case "error" -> {
+                    String message = Json.string(m.get("message"), "Unknown error");
+                    int slot = Json.integer(m.get("slot"), -1);
+                    log.accept("Link: " + c.app() + " reported: " + message);
+                    events.add(new Event(() -> game.appError(c.app(), message, slot)));
+                }
                 default -> events.add(new Event(() -> game.other(c.app(), m)));
             }
         }
@@ -299,7 +337,9 @@ public final class GameLink implements AutoCloseable {
         private void project(LinkServer.Connection c, Map<String, Object> m) {
             String file = Json.string(m.get("file"), Json.string(m.get("name"), "Untitled"));
             String name = Json.string(m.get("name"), file);
-            boolean open = Json.bool(m.get("open"), false);
+            // The answer to an edit: the placement in that slot switches to it (and a send, so it opens if the slot is gone).
+            int link = Json.integer(m.get("link"), -1);
+            boolean open = link >= 0 || Json.bool(m.get("open"), false);
             byte[] data;
             try {
                 data = Base64.getDecoder().decode(Json.string(m.get("data"), ""));
@@ -317,7 +357,8 @@ public final class GameLink implements AutoCloseable {
                 Path path = folder.resolve(rel);
                 events.add(new Event(() -> {
                     lastReceived = new Received(rel, name, c.app(), open, Instant.now());
-                    game.projectReceived(rel, path, name, open, c.app());
+                    if (link >= 0) game.projectLinked(rel, path, name, link, c.app());
+                    else game.projectReceived(rel, path, name, open, c.app());
                 }));
                 c.send(Map.of("type", "received", "file", rel, "open", open));
             } catch (IOException e) {

@@ -1,5 +1,6 @@
 package io.blockcompanion.core.placement;
 
+import io.blockcompanion.core.model.BlockPos;
 import io.blockcompanion.core.model.Box;
 
 /** Ray against an inclusive block box: whether the player is looking at the placement, and at which face. */
@@ -16,6 +17,28 @@ public final class RayBox {
      * @param inside   true if the ray starts inside the box; axis and sign then give the direction it mostly points in
      */
     public record Hit(double distance, int axis, int sign, boolean inside) {
+        /**
+         * How far {@code notches} scroll notches move a box looked at through this hit: along the axis of the face looked
+         * at, away from the player for positive notches (into the face) and closer for negative ones. Standing inside,
+         * along the way the player faces.
+         */
+        public BlockPos push(int notches) {
+            int d = (inside ? sign : -sign) * notches;
+            return new BlockPos(axis == 0 ? d : 0, axis == 1 ? d : 0, axis == 2 ? d : 0);
+        }
+    }
+
+    /**
+     * Whether box {@code a} is the one looked at rather than box {@code b} when the view ray meets both (a null hit
+     * misses): a box seen from outside wins over one the player stands in, of two seen from outside the nearer wins, and
+     * standing in both the smaller one wins. A tie goes to {@code b}.
+     */
+    public static boolean before(Hit a, long volumeA, Hit b, long volumeB) {
+        if (a == null) return false;
+        if (b == null) return true;
+        if (a.inside() != b.inside()) return !a.inside();
+        if (!a.inside()) return a.distance() < b.distance();
+        return volumeA < volumeB;
     }
 
     /**

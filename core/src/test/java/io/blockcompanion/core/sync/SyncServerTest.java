@@ -126,6 +126,7 @@ class SyncServerTest {
         assertThat(f.can(Permission.ADMIN)).isFalse();
         assertThat(f.autoPlaceAllowed()).isTrue();
         assertThat(f.easyPlaceAllowed()).isTrue();
+        assertThat(f.easyPlaceAutoAllowed()).isTrue();
         assertThat(alice.last(Message.SchematicList.class).reset()).isTrue();
         assertThat(alice.last(Message.PlacementList.class).reset()).isTrue();
     }
@@ -140,7 +141,17 @@ class SyncServerTest {
         assertThat(f.syncEnabled()).isFalse();
         assertThat(f.autoPlaceAllowed()).isFalse();
         assertThat(f.easyPlaceAllowed()).isFalse();
+        assertThat(f.easyPlaceAutoAllowed()).isFalse();
         assertThat(alice.all(Message.SchematicList.class)).isEmpty();
+    }
+
+    @Test
+    void easyPlaceAutoCanBeSwitchedOffAlone() {
+        config.allowEasyPlaceAuto = false;
+        join(alice);
+        Features f = alice.last(Message.ServerFeatures.class).features();
+        assertThat(f.easyPlaceAllowed()).isTrue();
+        assertThat(f.easyPlaceAutoAllowed()).isFalse();
     }
 
     @Test

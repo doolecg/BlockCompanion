@@ -17,6 +17,8 @@ public final class Keys {
     public static final KeyMapping LAYER_DOWN = key("layer_down", GLFW.GLFW_KEY_PAGE_DOWN);
     public static final KeyMapping LAYER_MODE = key("layer_mode", GLFW.GLFW_KEY_INSERT);
     public static final KeyMapping TOGGLE_VISIBLE = key("toggle_visible", InputConstants.UNKNOWN.getValue());
+    /** Steps the looked-at schematic's view: everything, layers up to here, this layer only, only this one, hidden. */
+    public static final KeyMapping VIEW = key("view", GLFW.GLFW_KEY_V);
     /** Marks a corner of the region to save (first, then the opposite one). */
     public static final KeyMapping SELECT_CORNER = key("select_corner", GLFW.GLFW_KEY_K);
     /** Opens the save screen: saves the marked region (or the loaded schematic's box) as .schem. */
@@ -24,6 +26,8 @@ public final class Keys {
 
     /** Switches easy place (right-click on a ghost places exactly its block) on and off. */
     public static final KeyMapping EASY_PLACE = key("easy_place", GLFW.GLFW_KEY_H);
+    /** Switches easy place's auto mode (missing blocks in reach place themselves) on and off. No key by default. */
+    public static final KeyMapping EASY_PLACE_AUTO = key("easy_place_auto", InputConstants.UNKNOWN.getValue());
     /**
      * Undo and redo of placement changes: pressed with Ctrl, across every placement like any program (Ctrl+Shift+undo redoes
      * too). Made before the lock key, which shares Y by default, so Y without Ctrl still reaches the lock key here (1.21.1
@@ -40,8 +44,8 @@ public final class Keys {
     /** Opens the settings screen. */
     public static final KeyMapping SETTINGS = key("settings", InputConstants.UNKNOWN.getValue());
 
-    public static final List<KeyMapping> ALL = List.of(LIBRARY, RESOURCES, MIRROR, LAYER_UP, LAYER_DOWN, LAYER_MODE, TOGGLE_VISIBLE,
-            SELECT_CORNER, SAVE, EASY_PLACE, LOCK, NEXT_PLACEMENT, GRAB, SETTINGS, UNDO, REDO);
+    public static final List<KeyMapping> ALL = List.of(LIBRARY, RESOURCES, MIRROR, LAYER_UP, LAYER_DOWN, LAYER_MODE, TOGGLE_VISIBLE, VIEW,
+            SELECT_CORNER, SAVE, EASY_PLACE, EASY_PLACE_AUTO, LOCK, NEXT_PLACEMENT, GRAB, SETTINGS, UNDO, REDO);
 
     private Keys() {
     }

@@ -11,7 +11,9 @@ import io.blockcompanion.core.library.SchematicLibrary;
 import io.blockcompanion.core.placement.PlacementLock;
 import io.blockcompanion.core.progress.ProgressTracker;
 import io.blockcompanion.core.project.BdProject;
+import io.blockcompanion.client.autobuild.AutoBuildClient;
 import io.blockcompanion.core.sync.Features;
+import io.blockcompanion.core.sync.Message;
 import io.blockcompanion.core.sync.Permission;
 import io.blockcompanion.core.sync.SchematicInfo;
 import io.blockcompanion.core.sync.SharedPlacement;
@@ -47,7 +49,8 @@ import java.util.Set;
  *     you, or get the project open in BlockDesigner.</li>
  *     <li><b>Placement</b>: what is loaded in this world, with where it is, its progress and whether it is locked; lock
  *     presets, show / hide, bring here, turn, mirror, follow BlockDesigner and unload.</li>
- *     <li><b>Resources</b>: what the selected placement still needs, against your inventory and linked chests.</li>
+ *     <li><b>Resources</b>: what the selected placement still needs, against your inventory and linked chests, and
+ *     AutoBuild (the server builds it from the linked chests, layer by layer).</li>
  *     <li><b>BlockDesigner</b>: the live link: off, waiting or connected, the linked project, Start / Stop, Get project
  *     and Send status.</li>
  * </ol>
@@ -117,12 +120,26 @@ public final class LibraryScreen extends Screen {
     private LoadedList loaded;
     private final List<Button> lockButtons = new ArrayList<>();
     private Button showButton, hereButton, turnButton, mirrorButton, unloadButton;
-    private Button liveButton;
-    private int detailX, detailW;
+    private Button liveButton, editButton;
+    /** The edit button's tooltip as last set: why it is off, or what it does. */
+    private String editTip;
+    private int detailX, detailW, editW;
     // Resources
     private ResourceList resources;
     private LoadedPlacement counted;
     private boolean visibleOnly;
+    // AutoBuild, in the Resources step
+    private Button autoStart, autoPause, autoStop;
+    private String autoTip;
+    /** The line next to the AutoBuild buttons and its colour, worked out each tick (not each frame). */
+    private String autoLine = "";
+    private int autoLineColor = Ui.MUTED;
+    /** The linked chests line, and the chests version and tool it was made for. */
+    private String chestLine;
+    private long chestLineVersion = -1;
+    private String chestLineTool;
+    /** The grey line under each step's button, worked out each tick. */
+    private String[] stepLines;
     // BlockDesigner
     private OptionList linkList;
 
@@ -138,11 +155,6 @@ public final class LibraryScreen extends Screen {
         this.parent = parent;
         this.step = step;
         this.server = server;
-    }
-
-    /** Opens on the server's shared space (the shared-space key). */
-    public static LibraryScreen shared(Screen parent) {
-        return new LibraryScreen(parent, Step.SOURCE, true);
     }
 
     private static SyncClient sync() {
@@ -166,10 +178,16 @@ public final class LibraryScreen extends Screen {
         shared = null;
         loaded = null;
         resources = null;
+        autoStart = autoPause = autoStop = null;
+        autoTip = null;
+        autoLine = "";
+        stepLines = null;
+        chestLine = null;
         linkList = null;
         loadButton = fileUnloadButton = deleteButton = shareButton = sharedLoad = sharedLock = sharedDelete = sharedUnlink = null;
         showButton = hereButton = turnButton = mirrorButton = unloadButton = null;
-        liveButton = null;
+        liveButton = editButton = null;
+        editTip = null;
         lockButtons.clear();
 
         // The step bar.
@@ -395,6 +413,14 @@ public final class LibraryScreen extends Screen {
 
         detailX = px + 3 + listW + 8;
         detailW = px + pw - 8 - detailX;
+        // Edit in BlockDesigner: top right, beside the name.
+        String edit = "Edit in BlockDesigner";
+        editW = Math.min(font.width(edit) + 16, detailW / 2);
+        editButton = addRenderableWidget(Ui.button(font.width(edit) + 8 <= editW ? edit : "Edit in BD", null, detailX + detailW - editW, py + 6,
+                editW, b -> {
+                    LoadedPlacement lp = selectedPlacement();
+                    if (lp != null) BlockCompanionClient.editInBlockDesigner(lp);
+                }));
         int lockY = py + 70, quarter = (detailW - 3 * Ui.GAP) / 4, third = (detailW - 2 * Ui.GAP) / 3;
         LockPreset[] presets = {LockPreset.NONE, LockPreset.POSITION, LockPreset.PLACE, LockPreset.ALL};
         String[] shortNames = {"None", "Move", "Place", "All"};
@@ -406,7 +432,7 @@ public final class LibraryScreen extends Screen {
         }
         // Two rows of three: what to do with it. Below the locks when there is room, else against the bottom.
         int y = Math.max(lockY + 24, Math.min(lockY + 30, py + ph - 52));
-        showButton = addRenderableWidget(Ui.button("Hide", "Show or hide its ghosts and box.", detailX, y, third, b -> toggleShown()));
+        showButton = addRenderableWidget(Ui.button("Hide", "Show or hide its ghosts (its box still shows with the tool in hand).", detailX, y, third, b -> toggleShown()));
         hereButton = addRenderableWidget(Ui.button("Bring here", "Move it to just in front of you.", detailX + third + Ui.GAP, y, third, b -> {
             LoadedPlacement lp = selectedPlacement();
             if (lp != null) BlockCompanionClient.bringHere(lp);
@@ -506,10 +532,25 @@ public final class LibraryScreen extends Screen {
             if (counted != null) minecraft.gui.setScreen(new ResourceScreen(this, counted));
         })).active = counted != null;
 
-        int top = py + 52, bottom = py + ph - 28;
+        int top = py + 52, bottom = py + ph - 52;
         resources = new ResourceList(minecraft, px + 3, top, pw - 6, bottom - top);
         addRenderableWidget(resources);
         recount();
+
+        // AutoBuild: the server builds the placement from the linked chests (Start), or its Pause / Resume and Stop.
+        int ay = py + ph - 49;
+        autoStart = addRenderableWidget(Ui.button("Start AutoBuild", null, px + 6, ay, 110, b -> {
+            AutoBuildClient.start(counted);
+            updateAuto();
+        }));
+        autoPause = addRenderableWidget(Ui.button("Pause", "Pause AutoBuild; Resume carries on where it stopped.", px + 6, ay, 60, b -> {
+            Message.AutoBuildStatus st = AutoBuildClient.status(counted);
+            boolean paused = st != null && st.state() == io.blockcompanion.core.autobuild.AutoBuildJob.State.PAUSED;
+            AutoBuildClient.control(counted, paused ? Message.AutoBuildAction.RESUME : Message.AutoBuildAction.PAUSE);
+        }));
+        autoStop = addRenderableWidget(Ui.button("Stop", "Stop AutoBuild. What it placed stays.", px + 6 + 60 + Ui.GAP, ay, 46,
+                b -> AutoBuildClient.control(counted, Message.AutoBuildAction.STOP)));
+        updateAuto();
 
         ClientConfig c = BlockCompanionClient.config();
         int cy = py + ph - 25, tw = 110;
@@ -526,12 +567,60 @@ public final class LibraryScreen extends Screen {
         if (resources != null) resources.count(counted, visibleOnly);
     }
 
-    /** The line about linked chests at the bottom of the Resources step. */
+    /** Start, or Pause / Resume and Stop while an AutoBuild of the counted placement is under way, and the line beside them. */
+    private void updateAuto() {
+        if (autoStart == null) return;
+        Message.AutoBuildStatus st = AutoBuildClient.status(counted);
+        boolean on = st != null && !st.state().over();
+        autoStart.visible = !on;
+        autoPause.visible = autoStop.visible = on;
+        int w = px + pw - 6 - (px + 6 + 110 + 8);
+        if (on) {
+            boolean paused = st.state() == io.blockcompanion.core.autobuild.AutoBuildJob.State.PAUSED;
+            autoPause.setMessage(Component.literal(paused ? "Resume" : "Pause"));
+            setAutoLine(AutoBuildClient.line(st), st.state() == io.blockcompanion.core.autobuild.AutoBuildJob.State.RUNNING ? Ui.ACCENT : Ui.WARN, w);
+            return;
+        }
+        AutoBuildClient.Readiness r = AutoBuildClient.check(counted);
+        autoStart.active = r.canStart();
+        if (!r.tip().equals(autoTip)) {
+            autoTip = r.tip();
+            autoStart.setTooltip(Tooltip.create(Component.literal(r.tip())));
+        }
+        if (st != null && !r.canStart() && !st.message().isEmpty()) {
+            setAutoLine(st.message(), st.state() == io.blockcompanion.core.autobuild.AutoBuildJob.State.FINISHED ? Ui.GOOD : Ui.MUTED, w);
+        } else {
+            setAutoLine(r.canStart() ? String.format(Locale.ROOT, "Ready: %,d %s, layer by layer", r.blocks(), r.blocks() == 1 ? "block" : "blocks")
+                    : r.tip(), r.canStart() ? Ui.GOOD : Ui.MUTED, w);
+        }
+    }
+
+    private void setAutoLine(String text, int color, int w) {
+        autoLine = Ui.fit(font, text, w);
+        autoLineColor = color;
+    }
+
+    /** The AutoBuild line next to its buttons: progress while it runs, else whether it can start. */
+    private void drawAuto(GuiGraphicsExtractor g) {
+        if (autoStart == null) return;
+        Ui.text(g, font, autoLine, px + 6 + 110 + 8, autoStart.getY() + 6, autoLineColor);
+    }
+
+    /** The line about linked chests at the bottom of the Resources step, made again only when the chests or the tool change. */
     private String chestLine() {
         var chests = ChestTracker.get().chests();
         String tool = BlockCompanionClient.config().toolItem;
+        if (chestLine == null || chests.version() != chestLineVersion || !tool.equals(chestLineTool)) {
+            chestLineVersion = chests.version();
+            chestLineTool = tool;
+            chestLine = Ui.fit(font, chestText(chests, tool), pw - 130);
+        }
+        return chestLine;
+    }
+
+    private static String chestText(io.blockcompanion.core.chests.LinkedChests chests, String tool) {
         String how = tool.isBlank() ? "switch the selection tool on in Settings to link chests"
-                : "sneak + right-click a chest with the " + tool.substring(tool.indexOf(':') + 1).replace('_', ' ') + " to link it";
+                : "Ctrl+right-click a chest with the " + tool.substring(tool.indexOf(':') + 1).replace('_', ' ') + " to link it";
         if (chests.size() == 0) return "No linked chests: " + how + ".";
         return chests.size() + (chests.size() == 1 ? " linked chest" : " linked chests")
                 + (chests.unknown() > 0 ? " (" + chests.unknown() + " not seen yet: open them once)" : "") + "; " + how + ".";
@@ -583,6 +672,7 @@ public final class LibraryScreen extends Screen {
             boolean any = lp != null;
             for (Button b : lockButtons) b.visible = any;
             showButton.visible = hereButton.visible = turnButton.visible = mirrorButton.visible = unloadButton.visible = liveButton.visible = any;
+            editButton.visible = any;
             if (any) {
                 LockPreset current = LockPreset.of(lp.locks);
                 LockPreset[] presets = {LockPreset.NONE, LockPreset.POSITION, LockPreset.PLACE, LockPreset.ALL};
@@ -593,6 +683,18 @@ public final class LibraryScreen extends Screen {
                 mirrorButton.active = !lp.locked(PlacementLock.MIRROR);
                 liveButton.setMessage(Component.literal("Live: ").append(Component.literal(lp.live ? "On" : "Off").withColor(lp.live ? Ui.GOOD : Ui.MUTED)));
                 liveButton.active = lp.fromBlockDesigner();
+                ClientLink.State link = ClientLink.state();
+                editButton.active = link == ClientLink.State.CONNECTED;
+                String tip = switch (link) {
+                    case OFF -> "The link to BlockDesigner is off: start it on the BlockDesigner step.";
+                    case WAITING -> "BlockDesigner isn't connected: open Resource Tracker's Game link there.";
+                    case CONNECTED -> "Opens it in BlockDesigner as the current project. It then follows BlockDesigner: "
+                            + "your changes there show up here live.";
+                };
+                if (!tip.equals(editTip)) {
+                    editTip = tip;
+                    editButton.setTooltip(Tooltip.create(Component.literal(tip)));
+                }
             }
         }
     }
@@ -601,7 +703,22 @@ public final class LibraryScreen extends Screen {
     public void tick() {
         super.tick();
         if (linkList != null) linkList.tick();
+        if (resources != null) resources.tick();
+        updateAuto();
+        updateStepLines();
         if (showButton != null) updateButtons();
+    }
+
+    private String[] stepLines() {
+        if (stepLines == null) updateStepLines();
+        return stepLines;
+    }
+
+    private void updateStepLines() {
+        Step[] steps = Step.values();
+        if (stepLines == null) stepLines = new String[steps.length];
+        int barW = Math.min(width - 2 * Ui.PAD, 560), sw = (barW - (steps.length - 1) * Ui.GAP) / steps.length;
+        for (int i = 0; i < steps.length; i++) stepLines[i] = Ui.fit(font, stepStatus(steps[i]), sw - 14);
     }
 
     /** The grey line under each step's button: how far that step is. */
@@ -664,7 +781,7 @@ public final class LibraryScreen extends Screen {
             int x = barX + i * (sw + Ui.GAP);
             if (steps[i] == step) Ui.underline(g, x, stepBarY() + 20, sw);
             Ui.dot(g, x + 3, stepBarY() + 24, stepColor(steps[i]));
-            Ui.text(g, font, Ui.fit(font, stepStatus(steps[i]), sw - 14), x + 13, stepBarY() + 24, Ui.MUTED);
+            Ui.text(g, font, stepLines()[i], x + 13, stepBarY() + 24, Ui.MUTED);
         }
 
         switch (step) {
@@ -674,13 +791,14 @@ public final class LibraryScreen extends Screen {
             }
             case PLACEMENT -> drawPlacement(g);
             case RESOURCES -> {
-                Ui.text(g, font, Ui.fit(font, ResourceScreen.summary(resources, visibleOnly), pw - 12), px + 6, py + 30, Ui.MUTED);
+                Ui.text(g, font, Ui.fit(font, resources.summary(), pw - 12), px + 6, py + 30, Ui.MUTED);
                 resources.headings(g, py + 41);
                 if (counted == null) Ui.centered(g, font, "Load a schematic first (step 1).", px + pw / 2, resources.getY() + 10, Ui.MUTED);
                 else if (resources.children().isEmpty()) {
                     Ui.centered(g, font, resources.total() > 0 ? "Everything is placed" : "Counting...", px + pw / 2, resources.getY() + 10, Ui.GOOD);
                 }
-                Ui.text(g, font, Ui.fit(font, chestLine(), pw - 130), px + 6, py + ph - 19, Ui.MUTED);
+                Ui.text(g, font, chestLine(), px + 6, py + ph - 19, Ui.MUTED);
+                drawAuto(g);
             }
             case LINK -> {
             }
@@ -721,11 +839,11 @@ public final class LibraryScreen extends Screen {
             if (!BlockCompanionClient.placements().isEmpty()) Ui.wrapped(g, font, Component.literal("Select a placement on the left."), x, y, w, Ui.MUTED, 2);
             return;
         }
-        Ui.shadowed(g, font, Ui.fit(font, lp.shortName(), w), x, y, Ui.ACCENT);
+        Ui.shadowed(g, font, Ui.fit(font, lp.shortName(), w - editW - Ui.GAP), x, y, Ui.ACCENT);
         y += 12;
         String where = dimension(lp.dimension) + "  " + lp.placement.origin().x() + ", " + lp.placement.origin().y() + ", " + lp.placement.origin().z();
         String turn = (lp.placement.rotation() != 0 ? lp.placement.rotation() * 90 + "°" : "not turned") + (lp.placement.mirrored() ? ", mirrored" : "");
-        Ui.text(g, font, Ui.fit(font, where, w), x, y, Ui.SOFT);
+        Ui.text(g, font, Ui.fit(font, where, w - editW - Ui.GAP), x, y, Ui.SOFT);
         y += 10;
         Ui.text(g, font, Ui.fit(font, turn + (lp.visible ? "" : ", hidden"), w), x, y, Ui.MUTED);
         y += 13;

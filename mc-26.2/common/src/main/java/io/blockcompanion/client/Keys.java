@@ -17,8 +17,8 @@ public final class Keys {
     public static final Identifier CATEGORY_ID = Identifier.fromNamespaceAndPath("blockcompanion", "main");
 
     public static KeyMapping.Category CATEGORY;
-    public static KeyMapping LIBRARY, RESOURCES, MIRROR, LAYER_UP, LAYER_DOWN, LAYER_MODE, TOGGLE_VISIBLE, SELECT_CORNER, SAVE, EASY_PLACE, LOCK,
-            NEXT_PLACEMENT, GRAB, SETTINGS, UNDO, REDO;
+    public static KeyMapping LIBRARY, RESOURCES, MIRROR, LAYER_UP, LAYER_DOWN, LAYER_MODE, TOGGLE_VISIBLE, VIEW, SELECT_CORNER, SAVE, EASY_PLACE, LOCK,
+            NEXT_PLACEMENT, GRAB, SETTINGS, UNDO, REDO, EASY_PLACE_AUTO;
     public static List<KeyMapping> ALL = List.of();
 
     private Keys() {
@@ -35,11 +35,15 @@ public final class Keys {
         LAYER_DOWN = key("layer_down", InputConstants.KEY_PAGEDOWN);
         LAYER_MODE = key("layer_mode", InputConstants.KEY_INSERT);
         TOGGLE_VISIBLE = key("toggle_visible", InputConstants.UNKNOWN.getValue());
+        // Steps the looked-at schematic's view: everything, layers up to here, this layer only, only this one, hidden.
+        VIEW = key("view", InputConstants.KEY_V);
         // Marks a corner of the region to save; the save screen saves it (or the loaded schematic's box) as .schem.
         SELECT_CORNER = key("select_corner", InputConstants.KEY_K);
         SAVE = key("save", InputConstants.KEY_O);
         // Switches easy place (right-click on a ghost places exactly its block) on and off.
         EASY_PLACE = key("easy_place", InputConstants.KEY_H);
+        // Switches easy place's auto mode (missing blocks in reach place themselves) on and off. No key by default.
+        EASY_PLACE_AUTO = key("easy_place_auto", InputConstants.UNKNOWN.getValue());
         // Undo and redo of placement changes: pressed with Ctrl, across every placement like any program (Ctrl+Shift+undo redoes
         // too). Made before the lock key, which shares Y by default: without Ctrl, Y still locks.
         UNDO = key("undo", InputConstants.KEY_Z);
@@ -50,7 +54,7 @@ public final class Keys {
         NEXT_PLACEMENT = key("next_placement", InputConstants.UNKNOWN.getValue());
         GRAB = key("grab", InputConstants.UNKNOWN.getValue());
         SETTINGS = key("settings", InputConstants.UNKNOWN.getValue());
-        ALL = List.of(LIBRARY, RESOURCES, MIRROR, LAYER_UP, LAYER_DOWN, LAYER_MODE, TOGGLE_VISIBLE, SELECT_CORNER, SAVE, EASY_PLACE, LOCK,
+        ALL = List.of(LIBRARY, RESOURCES, MIRROR, LAYER_UP, LAYER_DOWN, LAYER_MODE, TOGGLE_VISIBLE, VIEW, SELECT_CORNER, SAVE, EASY_PLACE, EASY_PLACE_AUTO, LOCK,
                 NEXT_PLACEMENT, GRAB, SETTINGS, UNDO, REDO);
         return ALL;
     }

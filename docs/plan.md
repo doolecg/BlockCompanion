@@ -231,7 +231,7 @@ Notes:
 - [ ] Auto-place (client-side printer), limited by range and speed, only where the server allows it (server announces
   permitted features)
 - [ ] Creative fill
-- [x] Building from linked chests: link chests with the selection tool (sneak + right-click); a BlockCompanion server
+- [x] Building from linked chests: link chests with the selection tool (Ctrl+right-click); a BlockCompanion server
   reads them and moves items into the player's inventory when easy place needs a block they don't carry (see Round 2)
 
 ## Milestone 4: Resource Tracker link
@@ -302,7 +302,7 @@ settings menu, more modern but Minecraft, easy to read".
   hover), colours from `core.hud.Colors`. Used by the settings, the schematic screen, the resource list, the save and
   colour screens.
 - [x] **Schematic screen (B) in four steps** (Source, Placement, Resources, BlockDesigner) with a step bar showing each
-  step's state and Back / Next. The shared-space screen is merged into Source (the J key opens it on the server side);
+  step's state and Back / Next. The shared-space screen is merged into Source (its **Server** side; the J key is gone);
   the resource list is shared with the N screen (`ResourceList`).
 - [x] **Settings** as sections down the left (a single stepping button on small screens), a scrolling column of rows,
   a **Keys** section that rebinds BlockCompanion's keys in place, and the BlockDesigner section.
@@ -316,3 +316,22 @@ settings menu, more modern but Minecraft, easy to read".
 - [ ] Resource Tracker sending `app-status` (a BlockDesigner-side change) so the game can name the open project before
   anything is sent.
 - [ ] In-game check by hand of rebinding keys and the step screen on NeoForge.
+
+## Round 4: the stick's controls and the tool panel
+
+Asked for on 2026-09-27: move the schematic only with a modifier held, set corners with Alt, and show the tool's mode
+in a panel like the info panel instead of a line above the hotbar.
+
+- [x] **Scrolling with the stick:** Shift+scroll does the tool's mode on the looked-at box, Ctrl+scroll turns it 90°,
+  Ctrl+Shift+scroll switches the mode; plain scroll is the hotbar again. The modes are cut to **Move** and **Mirror**
+  (`ToolMode`; old saved ROTATE, LAYER and VISIBILITY load as MOVE). The selection only moves.
+- [x] **View key (V):** cycles the looked-at schematic's view: everything, layers up to here, this layer only, only this
+  schematic, hidden. It replaces the Layers and Show / hide modes; undo steps through it like before.
+- [x] **Clicks:** Alt+left / right-click set corners 1 / 2 (`tool.corner.modifier`), Shift+right-click clears the
+  selection (`tool.clear.modifier`), Ctrl+right-click a chest links or unlinks it (`tool.link.modifier`, replaces
+  sneak + right-click). `scroll.mode.modifier` is gone; config version 3 moves `scroll.move.modifier` from ALT to SHIFT.
+- [x] **Tool panel** (`HudLayout.Element.TOOL`, `hud.toolPanel`): bottom right in the tooltip frame while the stick is
+  in hand, with the mode, its one-line hint and the controls; movable and sizable in the HUD editor. A line above the
+  hotbar says the new mode only when the panel is off.
+- [x] Settings rows for each control (Building tab) and the Tool panel switch (HUD tab), in 1.21.1, 26.2 and 26.3.
+- [ ] In-game check by hand of the new controls and the tool panel.

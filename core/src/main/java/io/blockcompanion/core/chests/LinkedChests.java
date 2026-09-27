@@ -68,6 +68,10 @@ public final class LinkedChests {
 
     private final Map<Pos, Seen> chests = new LinkedHashMap<>();
     private long version;
+    // Worked out from the chests once per version: screens and the HUD ask every frame.
+    private Map<String, Long> totals;
+    private int unknown;
+    private long derivedVersion = -1;
 
     /** Links or unlinks; returns true when it is linked now. */
     public boolean toggle(Pos pos) {
@@ -120,23 +124,56 @@ public final class LinkedChests {
         Seen old = chests.get(pos);
         // Opened contents never overwrite newer live ones.
         if (source == Source.OPENED && old.source() == Source.LIVE && old.when() > when) return;
-        Seen now = new Seen(items, when, source);
-        if (!now.equals(old)) {
-            chests.put(pos, now);
-            version++;
+        if (old.source() == source && old.items().equals(items)) {
+            // Same contents seen again: only the time moves on, which nothing derived depends on.
+            if (when > old.when()) chests.put(pos, new Seen(old.items(), when, source));
+            return;
         }
+        chests.put(pos, new Seen(items, when, source));
+        version++;
     }
 
-    /** Item totals over every linked chest with known contents. */
+    /**
+     * Items taken out of a linked chest by the mod itself (AutoBuild, a restock): subtracts them from the stored contents
+     * without reading the chest again. Returns false when the chest isn't linked, isn't known yet, or held fewer than
+     * that (then the stored contents can't be trusted: read the chest again).
+     */
+    public boolean removed(Pos pos, String item, long count) {
+        Seen old = chests.get(pos);
+        if (old == null || old.source() == Source.UNKNOWN) return false;
+        if (count <= 0) return true;
+        long have = old.items().getOrDefault(item, 0L);
+        Map<String, Long> items = new TreeMap<>(old.items());
+        if (have > count) items.put(item, have - count);
+        else items.remove(item);
+        chests.put(pos, new Seen(items, old.when(), old.source()));
+        version++;
+        return have >= count;
+    }
+
+    /** Item totals over every linked chest with known contents; worked out again only after a change. */
     public Map<String, Long> totals() {
-        Map<String, Long> t = new TreeMap<>();
-        for (Seen s : chests.values()) s.items().forEach((k, v) -> t.merge(k, v, Long::sum));
-        return Collections.unmodifiableMap(t);
+        derive();
+        return totals;
     }
 
     /** Linked chests whose contents aren't known yet. */
     public int unknown() {
-        return (int) chests.values().stream().filter(s -> s.source() == Source.UNKNOWN).count();
+        derive();
+        return unknown;
+    }
+
+    private void derive() {
+        if (derivedVersion == version && totals != null) return;
+        Map<String, Long> t = new TreeMap<>();
+        int u = 0;
+        for (Seen s : chests.values()) {
+            s.items().forEach((k, v) -> t.merge(k, v, Long::sum));
+            if (s.source() == Source.UNKNOWN) u++;
+        }
+        totals = Collections.unmodifiableMap(t);
+        unknown = u;
+        derivedVersion = version;
     }
 
     // ---- files -------------------------------------------------------------------------------------------------------
