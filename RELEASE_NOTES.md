@@ -1,3 +1,13 @@
+# BlockCompanion 0.3.1
+
+For Minecraft 1.21.1 and 26.3 on Fabric and NeoForge, 26.2 on Fabric, and the Paper plugin.
+
+## Changed
+- **Update check:** BlockCompanion looks for a new release only when the game starts, no longer every few hours
+  while you play. **Check now** on the settings screen's Updates tab still checks straight away.
+
+---
+
 # BlockCompanion 0.3.0
 
 The server can now build a schematic for you from your linked chests, easy place can place the blocks around you by

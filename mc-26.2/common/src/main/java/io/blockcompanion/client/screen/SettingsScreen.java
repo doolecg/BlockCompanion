@@ -493,7 +493,7 @@ public final class SettingsScreen extends Screen {
     private void addUpdates(OptionList l, ClientConfig c) {
         Updater u = Updates.get();
         l.header("Updates");
-        l.option("Check for updates", "Looks for a new release on GitHub when the game starts and every few hours.",
+        l.option("Check for updates", "Looks for a new release on GitHub when the game starts.",
                 Ui.toggle(c.updateCheck, v -> {
                     c.updateCheck = v;
                     if (v) Updates.check();

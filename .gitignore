@@ -46,3 +46,6 @@ AGENTS.md
 
 # Python caches
 __pycache__/
+
+# CurseForge upload pack (local only)
+curseforge-pack/

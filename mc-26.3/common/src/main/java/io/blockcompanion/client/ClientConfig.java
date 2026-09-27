@@ -140,7 +140,7 @@ public final class ClientConfig {
     /** Ghost, mark, box and outline colours, set on the settings screen's Colours tab. */
     public final Palette colors = new Palette();
 
-    /** Look for a newer release on GitHub at start and every few hours. */
+    /** Look for a newer release on GitHub when the game starts. */
     public boolean updateCheck = true;
     /** Download a found update straight away; it installs when the game quits. */
     public boolean updateAutoDownload = false;

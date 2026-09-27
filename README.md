@@ -52,7 +52,7 @@ release has one jar per loader and Minecraft version:
 3. Put your BlockDesigner projects (`.bdproj`) and schematics in `<game folder>/blockcompanion/schematics` (the folder
    is made the first time you start the game, and the load screen has an **Open folder** button).
 
-- **Updates:** BlockCompanion checks this repository for a newer release when the game starts and every few hours,
+- **Updates:** BlockCompanion checks this repository for a newer release when the game starts,
   says so in chat, and installs it from the settings screen's **Updates** tab when you quit the game. The check can be
   switched off there.
 
@@ -246,7 +246,7 @@ screen opens on the section you last used.
   material helper's marks, the chest and sign outline, the boxes (selected, looked at, locked) and the save selection.
   Click one for the colour editor (red, green and blue sliders, a hex field, quick swatches, before and after), or pick
   a preset: Default, Colour-blind safe (purple and blue instead of red and orange), Vivid or Soft.
-- **Updates:** BlockCompanion looks for a new release on GitHub when the game starts and every few hours, says so once
+- **Updates:** BlockCompanion looks for a new release on GitHub when the game starts, says so once
   in chat, and on the Updates tab downloads the jar for your loader and Minecraft version. It installs when you quit the
   game. **Download automatically** skips the click; the check itself can be switched off.
 

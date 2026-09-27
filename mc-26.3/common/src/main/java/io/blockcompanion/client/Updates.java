@@ -8,7 +8,7 @@ import net.minecraft.network.chat.Component;
 import java.nio.file.Path;
 
 /**
- * Update checks against the GitHub releases: at start and every few hours while {@code updates.check} is on. A found
+ * Update check against the GitHub releases, once when the game starts while {@code updates.check} is on. A found
  * update is announced once in chat and offered on the settings screen's Updates tab, which downloads it; it installs
  * when the game quits.
  */
@@ -16,7 +16,6 @@ public final class Updates {
     public static final String REPO = "doolecg/BlockCompanion";
     public static final String RELEASES = "https://github.com/" + REPO + "/releases/latest";
     static final String MINECRAFT = "26.3";
-    private static final long INTERVAL_MILLIS = 6L * 60 * 60 * 1000;
 
     private static Updater updater;
     private static boolean announced;
@@ -50,7 +49,6 @@ public final class Updates {
 
     static void tick(Minecraft mc) {
         if (updater == null) return;
-        if (BlockCompanionClient.config().updateCheck && updater.due(System.currentTimeMillis(), INTERVAL_MILLIS)) check();
         Updater.State s = updater.state();
         if (announced || mc.player == null || (s != Updater.State.AVAILABLE && s != Updater.State.READY)) return;
         announced = true;
