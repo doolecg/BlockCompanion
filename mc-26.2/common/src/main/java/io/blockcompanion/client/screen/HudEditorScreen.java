@@ -115,7 +115,7 @@ public final class HudEditorScreen extends Screen {
         if (super.mouseClicked(event, doubleClick)) return true;
         double mouseX = event.x(), mouseY = event.y();
         HudLayout.Element e = at(mouseX, mouseY);
-        if (e == null || event.button() != 0) return false;
+        if (e == null || event.button() != com.mojang.blaze3d.platform.InputConstants.MOUSE_BUTTON_LEFT) return false;
         select(e);
         dragging = e;
         int[] b = boxes.get(e);

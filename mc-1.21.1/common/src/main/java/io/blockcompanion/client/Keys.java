@@ -24,6 +24,13 @@ public final class Keys {
 
     /** Switches easy place (right-click on a ghost places exactly its block) on and off. */
     public static final KeyMapping EASY_PLACE = key("easy_place", GLFW.GLFW_KEY_H);
+    /**
+     * Undo and redo of placement changes: pressed with Ctrl, across every placement like any program (Ctrl+Shift+undo redoes
+     * too). Made before the lock key, which shares Y by default, so Y without Ctrl still reaches the lock key here (1.21.1
+     * clicks only one mapping per key; the tick passes the redo key's clicks on to the lock key when they share it).
+     */
+    public static final KeyMapping UNDO = key("undo", GLFW.GLFW_KEY_Z);
+    public static final KeyMapping REDO = key("redo", GLFW.GLFW_KEY_Y);
     /** Locks the looked-at (or selected) placement in place, or unlocks it. */
     public static final KeyMapping LOCK = key("lock", GLFW.GLFW_KEY_Y);
     /** Selects the next loaded placement (the one the keys act on when you don't look at a box). */
@@ -34,7 +41,7 @@ public final class Keys {
     public static final KeyMapping SETTINGS = key("settings", InputConstants.UNKNOWN.getValue());
 
     public static final List<KeyMapping> ALL = List.of(LIBRARY, RESOURCES, MIRROR, LAYER_UP, LAYER_DOWN, LAYER_MODE, TOGGLE_VISIBLE,
-            SELECT_CORNER, SAVE, EASY_PLACE, LOCK, NEXT_PLACEMENT, GRAB, SETTINGS);
+            SELECT_CORNER, SAVE, EASY_PLACE, LOCK, NEXT_PLACEMENT, GRAB, SETTINGS, UNDO, REDO);
 
     private Keys() {
     }

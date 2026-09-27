@@ -39,3 +39,34 @@ subprojects {
         }
     }
 }
+
+// Dev servers (run/server.properties of each loader module and the Paper plugin) start open to any player, peaceful
+// and creative. Minecraft 26.3 changed the vanilla default to white-list=true, so a fresh run folder would otherwise
+// lock everyone out. Only these keys are set; everything else the server writes is kept. Applied before runServer
+// and after the IDE sync (Loom's IntelliJ run configs launch without Gradle, so the sync seeds the file for them).
+def devServerProperties = [
+    'white-list'       : 'false',
+    'enforce-whitelist': 'false',
+    'difficulty'       : 'peaceful',
+    'gamemode'         : 'creative',
+    'force-gamemode'   : 'true',
+]
+subprojects {
+    if (!(project.name in ['fabric', 'neoforge', 'paper'])) return
+    def propsFile = project.file('run/server.properties')
+    def seed = {
+        propsFile.parentFile.mkdirs()
+        def lines = propsFile.exists() ? propsFile.readLines('UTF-8') : []
+        def missing = new LinkedHashMap(devServerProperties)
+        lines = lines.collect { line ->
+            def key = line.contains('=') && !line.startsWith('#') ? line.substring(0, line.indexOf('=')).trim() : null
+            if (key != null && missing.containsKey(key)) return "${key}=${missing.remove(key)}".toString()
+            line
+        }
+        missing.each { k, v -> lines << "${k}=${v}".toString() }
+        propsFile.write(lines.join('\n') + '\n', 'UTF-8')
+    }
+    tasks.matching { it.name in ['runServer', 'ideaSyncTask'] }.configureEach {
+        if (it.name == 'runServer') doFirst { seed() } else doLast { seed() }
+    }
+}

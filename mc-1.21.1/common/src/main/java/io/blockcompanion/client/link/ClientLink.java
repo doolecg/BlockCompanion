@@ -31,29 +31,57 @@ import java.util.stream.Stream;
  * progress and the linked chests. Client thread only.
  */
 public final class ClientLink {
+    /** Made on the first start and kept for the session, so stopping and starting again keeps one instance file. */
     private static GameLink link;
     private static long lastStatusKey;
     private static final Instant STARTED = Instant.now();
 
+    /** What the link is doing, for the screens. */
+    public enum State {
+        /** Not listening: BlockDesigner can't find this game. */
+        OFF,
+        /** Listening; BlockDesigner connects within a few seconds of seeing the instance file. */
+        WAITING,
+        /** An app is connected. */
+        CONNECTED
+    }
+
     private ClientLink() {
     }
 
+    /** Starts listening (and writing the instance file); does nothing when already running. */
     public static void start(Path library, String loader, String modVersion) {
-        if (link != null) return;
-        Minecraft mc = Minecraft.getInstance();
-        link = new GameLink(library, InstanceInfo.defaultFolder(), InstanceInfo.CLIENT, mc.getUser().getName(),
-                SharedConstants.getCurrentVersion().getName(), loader, modVersion, mc.gameDirectory.toPath(), new Game(), BlockCompanionClient.LOG::info);
+        if (link == null) {
+            Minecraft mc = Minecraft.getInstance();
+            link = new GameLink(library, InstanceInfo.defaultFolder(), InstanceInfo.CLIENT, mc.getUser().getName(),
+                    SharedConstants.getCurrentVersion().getName(), loader, modVersion, mc.gameDirectory.toPath(), new Game(),
+                    BlockCompanionClient.LOG::info);
+        }
         link.start();
     }
 
+    /** Stops listening: connected apps are dropped and the instance file is marked closed. */
     public static void stop() {
-        if (link == null) return;
-        link.close();
-        link = null;
+        if (link != null) link.close();
     }
 
     public static boolean running() {
-        return link != null;
+        return link != null && link.running();
+    }
+
+    public static State state() {
+        if (!running()) return State.OFF;
+        return link.connected() ? State.CONNECTED : State.WAITING;
+    }
+
+    /** Why the link could not start, or empty. */
+    public static String problem() {
+        return link == null ? "" : link.problem();
+    }
+
+    /** The loopback port while running, else 0. */
+    public static int port() {
+        return link == null ? 0 : link.port();
     }
 
     /** Apps connected right now (usually "Resource Tracker"). */
@@ -61,8 +89,25 @@ public final class ClientLink {
         return link == null ? List.of() : link.apps();
     }
 
+    /** The connected apps with their versions, since when, and the project each says it has open. */
+    public static List<GameLink.App> connections() {
+        return link == null ? List.of() : link.connections();
+    }
+
+    /** The last project BlockDesigner sent this session, or null. */
+    public static GameLink.Received lastReceived() {
+        return link == null ? null : link.lastReceived();
+    }
+
     public static boolean grab() {
         return link != null && link.requestGrab();
+    }
+
+    /** Sends the status (placements, progress, chests) to the connected apps now. False when none is connected. */
+    public static boolean sendStatus() {
+        if (link == null || !link.connected()) return false;
+        link.sendStatusNow();
+        return true;
     }
 
     public static void statusChanged() {

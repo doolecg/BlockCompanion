@@ -11,6 +11,8 @@
   "key.blockcompanion.save": "Save region as .schem",
   "key.blockcompanion.easy_place": "Easy place on / off",
   "key.blockcompanion.lock": "Lock in place / unlock",
+  "key.blockcompanion.undo": "Undo (with Ctrl)",
+  "key.blockcompanion.redo": "Redo (with Ctrl)",
   "key.blockcompanion.next_placement": "Select next schematic",
   "key.blockcompanion.grab": "Grab from BlockDesigner",
   "key.blockcompanion.settings": "BlockCompanion settings",

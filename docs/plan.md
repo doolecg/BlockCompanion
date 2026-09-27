@@ -290,3 +290,29 @@ Round 2 notes:
 - Resource packs of a server that only has a URL (a dedicated server) are downloaded by Resource Tracker into its data
   folder before use.
 - The 26.3 NeoForge dev client can hang in the game's shutdown watchdog after closing (as before this round).
+
+## Round 3: the schematic screen workflow, settings and the link from the game
+
+Asked for on 2026-09-27: "an option to live link from the mod too", "an easy workflow from loading (server or
+locally) > placement status, locked/unlocked > resources needed / chest links > BlockDesigner options", and "an easier
+settings menu, more modern but Minecraft, easy to read".
+
+- [x] **Shared look** (`client.screen.Ui`, `OptionList`): dark bevelled panels, a title band, gold section headings with
+  a rule, status lights, one option per row (label and a short description left, control right; the full text on
+  hover), colours from `core.hud.Colors`. Used by the settings, the schematic screen, the resource list, the save and
+  colour screens.
+- [x] **Schematic screen (B) in four steps** (Source, Placement, Resources, BlockDesigner) with a step bar showing each
+  step's state and Back / Next. The shared-space screen is merged into Source (the J key opens it on the server side);
+  the resource list is shared with the N screen (`ResourceList`).
+- [x] **Settings** as sections down the left (a single stepping button on small screens), a scrolling column of rows,
+  a **Keys** section that rebinds BlockCompanion's keys in place, and the BlockDesigner section.
+- [x] **Live link from the game** (`LinkPanel`, `ClientLink.state()`): start / stop, status (off, waiting, connected
+  to which app, since when), the linked project, Get project, Send now; `link.enabled` now only means "start with the
+  game". `GameLink` can stop and start again keeping its id and token, reports connections and the last project, and
+  understands an optional `app-status` from the app ([link protocol](link-protocol.md)).
+- [x] Core tests for restarting the link, connection details, `app-status` and sending the status now.
+- [x] 1.21.1, 26.2 and 26.3 build; `BLOCKCOMPANION_UI_SELFTEST=1` opens every step and section and saves screenshots
+  (`screenshots/bc-ui-*.png`); checked at GUI scale 2 in a small window and scale 4 at 1080p on 26.3, and on 1.21.1.
+- [ ] Resource Tracker sending `app-status` (a BlockDesigner-side change) so the game can name the open project before
+  anything is sent.
+- [ ] In-game check by hand of rebinding keys and the step screen on NeoForge.

@@ -3,6 +3,7 @@ package io.blockcompanion.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.blockcompanion.core.hud.HudLayout;
 import io.blockcompanion.core.hud.Palette;
+import io.blockcompanion.core.placement.ToolMode;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -49,6 +50,15 @@ public final class ClientConfig {
     public Modifier moveModifier = Modifier.ALT;
     /** Held while scrolling, turns the placement 90 degrees around Y. */
     public Modifier rotateModifier = Modifier.CTRL;
+    /** Held while scrolling with the selection tool in hand, steps through the tool's scroll modes. */
+    public Modifier modeModifier = Modifier.SHIFT;
+    /** What plain scrolling does with the selection tool in hand while looking at a box. */
+    public ToolMode toolMode = ToolMode.MOVE;
+    /**
+     * Moving, turning and mirroring a placement in the world (scrolling, the mirror key) and undo/redo only work with the
+     * selection tool in hand; without it the scroll wheel changes the hotbar slot as usual. Ignored while the tool is off.
+     */
+    public boolean toolRequired = true;
     /** How far away (blocks) looking at the placement's box still counts. */
     public double reach = 96;
 
@@ -79,6 +89,11 @@ public final class ClientConfig {
      * chest to link it. Empty switches the tool off.
      */
     public String toolItem = "minecraft:stick";
+    /**
+     * The save selection and the placement boxes show always, instead of only while the selection tool is in either
+     * hand. Ghosts show either way.
+     */
+    public boolean boxesAlways = false;
     /** Holding a block item gently marks the nearest ghosts that need it. */
     public boolean materialHelper = true;
     /** How many cells the material helper marks at most. */
@@ -127,6 +142,9 @@ public final class ClientConfig {
         int version = (int) parse(p.getProperty("config.version"), 1, 1, 1000);
         c.moveModifier = Modifier.parse(p.getProperty("scroll.move.modifier"), Modifier.ALT);
         c.rotateModifier = Modifier.parse(p.getProperty("scroll.rotate.modifier"), Modifier.CTRL);
+        c.modeModifier = Modifier.parse(p.getProperty("scroll.mode.modifier"), Modifier.SHIFT);
+        c.toolMode = ToolMode.parse(p.getProperty("tool.mode"), ToolMode.MOVE);
+        c.toolRequired = bool(p, "tool.requiredToMove", true);
         c.reach = parse(p.getProperty("placement.reach"), 96, 4, 512);
         // Version 1 files had faint ghosts (0.45); the near-solid look is the new default.
         c.ghostAlpha = version < 2 ? 0.85f : (float) parse(p.getProperty("ghost.alpha"), 0.85, 0.3, 1);
@@ -140,6 +158,7 @@ public final class ClientConfig {
         c.crosshairHint = bool(p, "hud.hint", true);
         c.hud.read(p);
         c.toolItem = p.getProperty("tool.item", "minecraft:stick").trim();
+        c.boxesAlways = "always".equalsIgnoreCase(p.getProperty("boxes.show", "tool").trim());
         c.materialHelper = bool(p, "materialHelper.enabled", true);
         c.materialHelperCells = (int) parse(p.getProperty("materialHelper.cells"), 48, 1, 512);
         c.particles = bool(p, "effects.particles", true);
@@ -181,6 +200,9 @@ public final class ClientConfig {
         p.setProperty("config.version", Integer.toString(VERSION));
         p.setProperty("scroll.move.modifier", moveModifier.name());
         p.setProperty("scroll.rotate.modifier", rotateModifier.name());
+        p.setProperty("scroll.mode.modifier", modeModifier.name());
+        p.setProperty("tool.mode", toolMode.name());
+        p.setProperty("tool.requiredToMove", Boolean.toString(toolRequired));
         p.setProperty("placement.reach", Double.toString(reach));
         p.setProperty("ghost.alpha", Float.toString(ghostAlpha));
         p.setProperty("ghost.shimmer", Boolean.toString(ghostShimmer));
@@ -193,6 +215,7 @@ public final class ClientConfig {
         p.setProperty("hud.hint", Boolean.toString(crosshairHint));
         hud.write(p);
         p.setProperty("tool.item", toolItem);
+        p.setProperty("boxes.show", boxesAlways ? "always" : "tool");
         p.setProperty("materialHelper.enabled", Boolean.toString(materialHelper));
         p.setProperty("materialHelper.cells", Integer.toString(materialHelperCells));
         p.setProperty("effects.particles", Boolean.toString(particles));
@@ -212,7 +235,7 @@ public final class ClientConfig {
             Files.createDirectories(file.getParent());
             try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
                 p.store(w, "BlockCompanion. Also on the settings screen in the game. Modifiers: ALT, CTRL, SHIFT or NONE (scroll"
-                        + " action off). ghost.alpha 0.3 to 1. tool.item empty switches the selection tool off. color.* are #RRGGBB. Keys are in Options > Controls.");
+                        + " action off). ghost.alpha 0.3 to 1. tool.item empty switches the selection tool off. boxes.show tool or always. tool.mode: MOVE, ROTATE, MIRROR, LAYER or VISIBILITY. color.* are #RRGGBB. Keys are in Options > Controls.");
             }
         } catch (IOException e) {
             BlockCompanionClient.LOG.warn("Could not write {}: {}", file, e.toString());

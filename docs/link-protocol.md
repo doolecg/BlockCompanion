@@ -8,7 +8,7 @@ sending projects, following progress and linked chests, and installing the mod. 
 
 Every running BlockCompanion writes `<user home>/.blockcompanion/instances/<id>.json`:
 
-- a game client (Fabric or NeoForge) always, while the live link is on in its settings;
+- a game client (Fabric or NeoForge) while its live link runs (see [In the game](#in-the-game-start-stop-and-status));
 - a dedicated Fabric or NeoForge server, and a Paper server with the plugin.
 
 ```json
@@ -56,6 +56,7 @@ A wrong or missing token gets `{"type": "error", …}` and the connection closes
 |---|---|
 | `project` | `{"file": "Castle.bdproj", "name": "Castle", "open": true, "sha256": "…", "data": "<base64>"}`. The game checks the hash, writes the file to `schematics/BlockDesigner/<file>` (a server: into its shared space) and answers `{"type": "received", "file": "BlockDesigner/Castle.bdproj"}`. `open: true` (the user pressed Send): placements of that file reload, and if none is loaded it is loaded in front of the player. `open: false` (a live update): only placements of that file set to follow BlockDesigner reload. A server switches shared placements of an earlier file of that name to the new one, so every player following them gets it. |
 | `refresh` | Sends the status now. |
+| `app-status` | Optional: `{"project": "Castle", "live": true}`, the project open in the app and whether its Live button is on. The game shows it on its BlockDesigner step; send it after the welcome and whenever either changes. Games that don't know it ignore it. |
 
 ## Game to app
 
@@ -66,6 +67,28 @@ A wrong or missing token gets `{"type": "error", …}` and the connection closes
 | `error` | `{"message": …}` about the last message. |
 
 Unknown message types are ignored both ways, so either side can add types.
+
+## In the game: start, stop and status
+
+The game is the listening side, so "connecting" from the game means starting the link: the game opens its port and
+writes (or revives) its instance file, and the app, which looks at the instance folder every two seconds, connects on
+its own. Nothing in the protocol needs to change for that.
+
+- **Start link** / **Stop link** (the schematic screen's BlockDesigner step, and the settings' BlockDesigner section):
+  stopping closes the port, drops connected apps and marks the instance file `closed`; starting again keeps the same
+  `id` and `token` for the rest of the session (one instance file, a new `port`), so the app shows the same game coming
+  back rather than a new one.
+- **Start with the game** (`link.enabled` in the config, on by default): whether the link starts when the game starts.
+  Switching it doesn't start or stop the running link.
+- **Status**: off, waiting for BlockDesigner (with the port), or connected to `<app> <version>` since when; the last
+  project the app sent (sent or updated, by which app, how long ago) and how many placements follow it, or the project
+  the app reports with `app-status`.
+- **Get project** sends `grab`; **Send now** sends the `status` straight away instead of waiting for the next change.
+
+What the app side (Resource Tracker) would need for the rest: it reconnects about 10 seconds after a connection closes
+and every 2 seconds finds new games, so a game that is stopped and started again comes back by itself. To show the
+project open in BlockDesigner in the game before anything is sent, the app has to send `app-status` (above); until it
+does, the game shows the last project it received instead.
 
 ## Installing the mod
 

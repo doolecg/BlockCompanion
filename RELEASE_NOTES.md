@@ -1,3 +1,43 @@
+# BlockCompanion 0.2.0
+
+Moving a build now needs the stick in your hand, Ctrl+Z undoes like any program, and the schematic and settings
+screens were rebuilt to be easier to follow. For Minecraft 1.21.1 and 26.3 on Fabric and NeoForge, 26.2 on Fabric, and
+the Paper plugin.
+
+## New
+- **Stick-in-hand controls:** moving, turning and mirroring a schematic in the world now need the selection tool (a
+  stick by default) in your hand, so scrolling through the hotbar never knocks a build out of place. Without it the
+  scroll wheel works as usual. The Building settings can switch this off.
+- **Tool modes:** with the stick, plain scrolling does what its mode says and **Shift+scroll** switches the mode, shown
+  above the hotbar: **Move**, **Turn**, **Mirror**, **Layers** or **Show / hide** (everything, layers up to here, this
+  layer only, only this schematic, hidden). The mode is remembered.
+- **Undo and redo:** **Ctrl+Z** undoes and **Ctrl+Y** or **Ctrl+Shift+Z** redoes, with one history across every loaded
+  schematic: moves, turns, mirroring, locks, layers and hiding, in the order you made them. No stick needed; a quick
+  scroll counts as one step, a new change clears what could be redone, and a locked schematic is never moved by undo.
+- **Boxes only with the tool:** the schematic boxes and the save selection show while the stick is in either hand and
+  fade out when you put it away, with softly pulsing tinted faces, a brighter face where you look and corner brackets.
+  A locked box stays blue. **Show boxes** in the settings keeps them on always; ghosts show either way.
+- **Live link from the game:** start and stop the link to BlockDesigner in the game, see whether it is off, waiting or
+  connected (and to which app), **Get project** from BlockDesigner and **Send now**. **Start with the game** decides
+  whether it starts by itself.
+- **Delete schematics** from the schematic screen's Source step; it asks first.
+
+## Changed
+- **The schematic screen (B)** is now four steps: **Source** (your schematic folder, or what a BlockCompanion server
+  shares), **Placement** (what's loaded, where, how far built, locks, show / hide, bring here, turn, mirror, Live),
+  **Resources** (the same list as **N**) and **BlockDesigner** (the live link). The server's shared schematics (**J**)
+  open in the same screen.
+- **New settings screen:** sections down the left (Ghosts, Building, HUD, Effects, Colours, Keys, BlockDesigner,
+  Updates), one option per row with a short description, and **Reset** per section.
+- **Keys can be rebound right in the settings:** click a key, press the new one (Esc leaves it unbound); a key another
+  action also uses shows red, with which one.
+- **Undo** and **Redo** are new keys in Controls (used with Ctrl). Redo's default Y is also Lock's key; both still work.
+
+## Fixed
+- **Dragging in the HUD editor** works again on Minecraft 26.3, which numbers mouse buttons differently.
+
+---
+
 # BlockCompanion 0.1.0
 
 The first release: a light schematic mod for building in Minecraft, and the in-game companion to BlockDesigner. For

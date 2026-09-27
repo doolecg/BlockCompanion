@@ -136,9 +136,6 @@ public final class GhostRenderer {
     private List<io.blockcompanion.core.model.BlockPos> highlights = List.of();
     private BlockPos target;
 
-    private VertexBuffer boxLines;
-    private Box boxLinesFor;
-    private int boxLinesColor;
 
     private ByteBufferBuilder ghostBytes, overlayBytes, lineBytes, sortBytes;
     private final RandomSource random = RandomSource.create();
@@ -165,9 +162,6 @@ public final class GhostRenderer {
         pops.clear();
         highlights = List.of();
         target = null;
-        if (boxLines != null) boxLines.close();
-        boxLines = null;
-        boxLinesFor = null;
     }
 
     /** Marks every section for rebuilding, e.g. after a resource reload or a config change. */
@@ -222,7 +216,7 @@ public final class GhostRenderer {
     /**
      * Draws the placement. {@code modelView} is the camera rotation (no translation), as the level renderer uses it.
      */
-    public void render(Placement p, Layers layers, int boxColor, boolean thick, Matrix4f modelView, Matrix4f projection, Vec3 cam,
+    public void render(Placement p, Layers layers, Matrix4f modelView, Matrix4f projection, Vec3 cam,
                        Frustum frustum, float partialTick) {
         Minecraft mc = Minecraft.getInstance();
         Level level = mc.level;
@@ -266,7 +260,7 @@ public final class GhostRenderer {
 
         if (config.ghostBlockEntities) renderBlockEntities(mc, level, visible, cam, partialTick);
 
-        // Wrong / extra / model-less blocks: tinted boxes and outlines, then the bounding box and the helpers.
+        // Wrong / extra / model-less blocks: tinted boxes and outlines, then the helpers (the bounding box is BoxRenderer's).
         ShaderInstance colorShader = GameRenderer.getPositionColorShader();
         if (colorShader == null) return;
         RenderSystem.enableBlend();
@@ -287,7 +281,6 @@ public final class GhostRenderer {
             vb.bind();
             vb.drawWithShader(sectionMatrix(modelView, e.getKey(), cam), projection, colorShader);
         }
-        drawBox(boxColor, thick, modelView, projection, cam, colorShader);
         VertexBuffer.unbind();
         drawHelpers(cam);
         RenderSystem.lineWidth(1f);
@@ -342,24 +335,6 @@ public final class GhostRenderer {
     private static Matrix4f sectionMatrix(Matrix4f modelView, long key, Vec3 cam) {
         io.blockcompanion.core.model.BlockPos s = io.blockcompanion.core.model.BlockPos.unpack(key);
         return new Matrix4f(modelView).translate((float) ((s.x() << 4) - cam.x), (float) ((s.y() << 4) - cam.y), (float) ((s.z() << 4) - cam.z));
-    }
-
-    private void drawBox(int color, boolean thick, Matrix4f modelView, Matrix4f projection, Vec3 cam, ShaderInstance shader) {
-        if (boxLines == null || !box.equals(boxLinesFor) || color != boxLinesColor) {
-            if (boxLines != null) boxLines.close();
-            boxLines = new VertexBuffer(VertexBuffer.Usage.STATIC);
-            BufferBuilder b = new BufferBuilder(bytes(2), VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
-            edges(b, 0, 0, 0, box.sizeX(), box.sizeY(), box.sizeZ(), color);
-            boxLines.bind();
-            boxLines.upload(b.buildOrThrow());
-            boxLinesFor = box;
-            boxLinesColor = color;
-        }
-        Matrix4f m = new Matrix4f(modelView).translate((float) (box.minX() - cam.x), (float) (box.minY() - cam.y), (float) (box.minZ() - cam.z));
-        RenderSystem.lineWidth(thick ? 3f : 2f);
-        boxLines.bind();
-        boxLines.drawWithShader(m, projection, shader);
-        RenderSystem.lineWidth(2f);
     }
 
     /** The easy-place target outline and the material helper's marks, drawn fresh each frame (camera-relative). */

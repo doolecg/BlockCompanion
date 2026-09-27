@@ -117,18 +117,25 @@ public final class SaveScreen extends Screen {
     }
 
     @Override
+    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        super.extractBackground(g, mouseX, mouseY, partialTick);
+        int cx = width / 2, y = height / 2 - 30;
+        Ui.panel(g, cx - 124, y - 48, 248, 128);
+    }
+
+    @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
         super.extractRenderState(g, mouseX, mouseY, partialTick);
         int cx = width / 2, y = height / 2 - 30;
-        g.centeredText(font, title, cx, y - 40, 0xFFFFFFFF);
+        Ui.section(g, font, title.getString(), cx - 116, y - 40, 232);
         if (region != null) {
             Box b = region.box();
             String what = String.format(Locale.ROOT, "%d × %d × %d at %d, %d, %d (%s)", b.sizeX(), b.sizeY(), b.sizeZ(),
                     b.minX(), b.minY(), b.minZ(), region.source());
-            g.centeredText(font, what, cx, y - 24, 0xFFB0B0B0);
+            g.centeredText(font, what, cx, y - 24, Ui.MUTED);
         }
         g.text(font, Component.translatable("blockcompanion.save.name"), cx - 110, y - 11, 0xFFA0A0A0, false);
-        if (status != null) g.centeredText(font, status, cx, y + 28, statusError ? 0xFFFF8060 : 0xFF9AD09A);
+        if (status != null) g.centeredText(font, status, cx, y + 28, statusError ? Ui.BAD : Ui.GOOD);
     }
 
     @Override

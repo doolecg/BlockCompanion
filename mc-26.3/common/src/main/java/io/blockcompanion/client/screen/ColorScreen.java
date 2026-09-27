@@ -111,6 +111,13 @@ public final class ColorScreen extends Screen {
     }
 
     @Override
+    public void extractBackground(net.minecraft.client.gui.GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        super.extractBackground(g, mouseX, mouseY, partialTick);
+        int top = Math.max(8, height / 2 - 100);
+        Ui.panel(g, width / 2 - 140, top - 6, 280, 212);
+    }
+
+    @Override
     public void onClose() {
         minecraft.gui.setScreen(parent instanceof SettingsScreen s ? s.reopen() : parent);
     }

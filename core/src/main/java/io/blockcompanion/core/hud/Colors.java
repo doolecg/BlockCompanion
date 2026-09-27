@@ -23,6 +23,15 @@ public final class Colors {
         return 0xFF000000 | (r << 16) | (g << 8) | bl;
     }
 
+    /** {@code a} blended toward {@code b} by {@code t} (0 = a, 1 = b); the alpha of {@code a} is kept. */
+    public static int mix(int a, int b, double t) {
+        double f = Math.max(0, Math.min(1, t));
+        int r = (int) Math.round(((a >> 16) & 0xFF) * (1 - f) + ((b >> 16) & 0xFF) * f);
+        int g = (int) Math.round(((a >> 8) & 0xFF) * (1 - f) + ((b >> 8) & 0xFF) * f);
+        int bl = (int) Math.round((a & 0xFF) * (1 - f) + (b & 0xFF) * f);
+        return (a & 0xFF000000) | (r << 16) | (g << 8) | bl;
+    }
+
     /** {@code argb} with its colour channels multiplied by {@code k} (darker below 1). */
     public static int shade(int argb, double k) {
         int r = (int) Math.min(255, ((argb >> 16) & 0xFF) * k);

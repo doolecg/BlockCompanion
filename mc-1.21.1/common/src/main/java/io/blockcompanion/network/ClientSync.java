@@ -2,7 +2,7 @@ package io.blockcompanion.network;
 
 import io.blockcompanion.client.BlockCompanionClient;
 import io.blockcompanion.client.LoadedPlacement;
-import io.blockcompanion.client.screen.SharedScreen;
+import io.blockcompanion.client.screen.LibraryScreen;
 import io.blockcompanion.core.library.SchematicLibrary;
 import io.blockcompanion.core.model.BlockPos;
 import io.blockcompanion.core.placement.Placement;
@@ -65,7 +65,7 @@ public final class ClientSync {
 
     public static void tick(Minecraft mc) {
         init();
-        while (SyncKeys.SHARED.consumeClick()) mc.setScreen(new SharedScreen(mc.screen));
+        while (SyncKeys.SHARED.consumeClick()) mc.setScreen(LibraryScreen.shared(mc.screen));
         ClientPacketListener conn = mc.getConnection();
         if (conn != lastConnection) {
             lastConnection = conn;
@@ -100,7 +100,7 @@ public final class ClientSync {
     private static final class Listener implements SyncClient.Listener {
         @Override
         public void changed() {
-            if (Minecraft.getInstance().screen instanceof SharedScreen s) s.refresh();
+            if (Minecraft.getInstance().screen instanceof LibraryScreen s) s.refresh();
         }
 
         @Override
@@ -154,7 +154,8 @@ public final class ClientSync {
             if (lp == null) return;
             lp.placement.setOrientation(pose.rotation(), pose.mirrored());
             lp.placement.moveTo(new BlockPos(pose.x(), pose.y(), pose.z()));
-            BlockCompanionClient.changed(lp);
+            // Someone else's move (or the server putting it back): not an undo step of the player's own.
+            BlockCompanionClient.changed(lp, false);
         }
 
         @Override

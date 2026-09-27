@@ -13,6 +13,7 @@ import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -116,6 +117,10 @@ public final class LinkServer implements AutoCloseable {
         private volatile boolean ready;
         private volatile String app = "?";
         private volatile String appVersion = "";
+        private volatile Instant since = Instant.now();
+        /** What the app last said about itself ({@code app-status}): its open project and whether Live is on. */
+        private volatile String project = "";
+        private volatile boolean live;
 
         private Connection(Socket socket) throws IOException {
             this.socket = socket;
@@ -133,6 +138,26 @@ public final class LinkServer implements AutoCloseable {
 
         public boolean ready() {
             return ready;
+        }
+
+        /** When the app said hello. */
+        public Instant since() {
+            return since;
+        }
+
+        /** The project the app has open, from its {@code app-status}; empty when it hasn't said. */
+        public String project() {
+            return project;
+        }
+
+        /** The app sends every change (its Live button), from its {@code app-status}. */
+        public boolean live() {
+            return live;
+        }
+
+        void appStatus(String project, boolean live) {
+            this.project = project == null ? "" : project;
+            this.live = live;
         }
 
         public void send(Map<String, Object> message) {
@@ -169,6 +194,7 @@ public final class LinkServer implements AutoCloseable {
                         }
                         app = Json.string(m.get("app"), "app");
                         appVersion = Json.string(m.get("version"), "");
+                        since = Instant.now();
                         ready = true;
                         send(handler.welcome(this));
                         continue;

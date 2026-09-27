@@ -18,7 +18,7 @@ public final class Keys {
 
     public static KeyMapping.Category CATEGORY;
     public static KeyMapping LIBRARY, RESOURCES, MIRROR, LAYER_UP, LAYER_DOWN, LAYER_MODE, TOGGLE_VISIBLE, SELECT_CORNER, SAVE, EASY_PLACE, LOCK,
-            NEXT_PLACEMENT, GRAB, SETTINGS;
+            NEXT_PLACEMENT, GRAB, SETTINGS, UNDO, REDO;
     public static List<KeyMapping> ALL = List.of();
 
     private Keys() {
@@ -40,6 +40,10 @@ public final class Keys {
         SAVE = key("save", InputConstants.KEY_O);
         // Switches easy place (right-click on a ghost places exactly its block) on and off.
         EASY_PLACE = key("easy_place", InputConstants.KEY_H);
+        // Undo and redo of placement changes: pressed with Ctrl, across every placement like any program (Ctrl+Shift+undo redoes
+        // too). Made before the lock key, which shares Y by default: without Ctrl, Y still locks.
+        UNDO = key("undo", InputConstants.KEY_Z);
+        REDO = key("redo", InputConstants.KEY_Y);
         // Locks the looked-at (or selected) placement in place, or unlocks it.
         LOCK = key("lock", InputConstants.KEY_Y);
         // Selects the next loaded placement; asks BlockDesigner for its project; opens the settings.
@@ -47,7 +51,7 @@ public final class Keys {
         GRAB = key("grab", InputConstants.UNKNOWN.getValue());
         SETTINGS = key("settings", InputConstants.UNKNOWN.getValue());
         ALL = List.of(LIBRARY, RESOURCES, MIRROR, LAYER_UP, LAYER_DOWN, LAYER_MODE, TOGGLE_VISIBLE, SELECT_CORNER, SAVE, EASY_PLACE, LOCK,
-                NEXT_PLACEMENT, GRAB, SETTINGS);
+                NEXT_PLACEMENT, GRAB, SETTINGS, UNDO, REDO);
         return ALL;
     }
 

@@ -192,8 +192,8 @@ public final class GhostRenderer {
         }
     }
 
-    /** Meshes what is stale (within the frame budget) and submits the visible sections and the box for this frame. */
-    public void submit(Placement p, Layers layers, int boxColor, boolean thick, SubmitNodeCollector collector, PoseStack poseStack, Vec3 cam,
+    /** Meshes what is stale (within the frame budget) and submits the visible sections for this frame (the box is {@link BoxRenderer}'s). */
+    public void submit(Placement p, Layers layers, SubmitNodeCollector collector, PoseStack poseStack, Vec3 cam,
                        Frustum frustum, CameraRenderState camera) {
         ClientLevel level = Minecraft.getInstance().level;
         if (p == null || level == null) {
@@ -249,7 +249,6 @@ public final class GhostRenderer {
         }
         if (config.ghostBlockEntities) submitSpecials(level, visible, collector, poseStack, cam, camera);
         submitPops(collector, poseStack, cam);
-        submitBox(boxColor, thick, collector, poseStack, cam);
         submitHelpers(collector, poseStack, cam);
     }
 
@@ -327,15 +326,6 @@ public final class GhostRenderer {
             collector.submitCustomGeometry(poseStack, type, (pose, out) -> q.replay(pose, out, 1f, fade, true));
             poseStack.popPose();
         }
-    }
-
-    private void submitBox(int color, boolean thick, SubmitNodeCollector collector, PoseStack poseStack, Vec3 cam) {
-        float sx = box.sizeX(), sy = box.sizeY(), sz = box.sizeZ();
-        float width = thick ? 3f : 2f;
-        poseStack.pushPose();
-        poseStack.translate(box.minX() - cam.x, box.minY() - cam.y, box.minZ() - cam.z);
-        collector.submitCustomGeometry(poseStack, RenderTypes.lines(), (pose, out) -> edges(out, pose, 0, 0, 0, sx, sy, sz, color, width));
-        poseStack.popPose();
     }
 
     /** The easy-place target outline and the material helper's marks. */

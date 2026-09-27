@@ -5,6 +5,7 @@ import io.blockcompanion.client.render.GhostRenderer;
 import io.blockcompanion.core.link.GameLink;
 import io.blockcompanion.core.placement.Layers;
 import io.blockcompanion.core.placement.Placement;
+import io.blockcompanion.core.placement.PlacementHistory;
 import io.blockcompanion.core.placement.PlacementLock;
 import io.blockcompanion.core.placement.SavedPlacement;
 
@@ -32,6 +33,10 @@ public final class LoadedPlacement {
     /** The material helper's marks for this placement. */
     List<io.blockcompanion.core.model.BlockPos> helperCells = List.of();
     boolean dirty;
+    /** Undo and redo of its moves, turns, mirroring, locks, layer view and hiding (Ctrl+Z / Ctrl+Y; the order across placements is in BlockCompanionClient's timeline). */
+    final PlacementHistory history = new PlacementHistory();
+    /** Its state after the last recorded change: what the next change is recorded against. Null until first set. */
+    PlacementHistory.State baseline;
 
     LoadedPlacement(int slot, Placement placement, String dimension) {
         this.slot = slot;
@@ -66,6 +71,15 @@ public final class LoadedPlacement {
 
     public GhostRenderer ghosts() {
         return ghosts;
+    }
+
+    /** Where it is, how it's turned, its locks, layer view and whether it shows, for undo. */
+    public PlacementHistory.State state() {
+        return PlacementHistory.State.of(placement, layers, locks, visible);
+    }
+
+    public PlacementHistory history() {
+        return history;
     }
 
     SavedPlacement saved() {

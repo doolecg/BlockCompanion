@@ -56,6 +56,17 @@ public final class GameLink implements AutoCloseable {
     private record Event(Runnable run) {
     }
 
+    /**
+     * An app connected to the game: its name and version from the hello, since when, and what it said about itself in
+     * its optional {@code app-status} (the project it has open, empty when unknown, and whether its Live is on).
+     */
+    public record App(String name, String version, Instant since, String project, boolean live) {
+    }
+
+    /** The last project an app sent: the library path it was written to, its name, the app, and when. */
+    public record Received(String file, String name, String app, boolean open, Instant when) {
+    }
+
     private final Path folder;
     private final Path instances;
     private final Game game;
@@ -65,6 +76,8 @@ public final class GameLink implements AutoCloseable {
     private LinkServer server;
     private long lastHeartbeat, lastStatus;
     private boolean statusDirty = true;
+    private Received lastReceived;
+    private String problem = "";
 
     /**
      * @param folder where received projects go ({@link #FOLDER} inside it)
@@ -81,8 +94,12 @@ public final class GameLink implements AutoCloseable {
                 0, LinkServer.newToken(), List.of(), List.of(), now, now, false, gameDir.toAbsolutePath().normalize().toString());
     }
 
-    /** Starts listening and writes the instance file. Failure is logged; the game runs on without the link. */
+    /**
+     * Starts listening and writes the instance file. Failure is logged ({@link #problem()}); the game runs on without
+     * the link. After {@link #close()} it can be started again: the same id and token, a new port.
+     */
     public void start() {
+        if (server != null) return;
         try {
             server = new LinkServer(info.token(), new Handler(), log);
             int port = server.start();
@@ -90,11 +107,46 @@ public final class GameLink implements AutoCloseable {
                     info.pid(), port, info.token(), info.clientPacks(), info.serverPacks(), info.started(), info.updated(), false, info.gameDir());
             InstanceInfo.cleanUp(instances, Instant.now());
             heartbeat(System.currentTimeMillis());
+            problem = "";
+            statusDirty = true;
             log.accept("Link to BlockDesigner ready on 127.0.0.1:" + port);
         } catch (IOException e) {
             log.accept("Link to BlockDesigner not available: " + e);
+            problem = e.getMessage() == null ? e.toString() : e.getMessage();
             server = null;
         }
+    }
+
+    /** True while listening for BlockDesigner (between {@link #start()} and {@link #close()}). */
+    public boolean running() {
+        return server != null;
+    }
+
+    /** Why the last {@link #start()} failed; empty when it didn't. */
+    public String problem() {
+        return problem;
+    }
+
+    /** The loopback port while running, else 0. */
+    public int port() {
+        return server == null ? 0 : server.port();
+    }
+
+    /** The apps connected now, with their details. */
+    public List<App> connections() {
+        if (server == null) return List.of();
+        return server.connections().stream().map(c -> new App(c.app(), c.appVersion(), c.since(), c.project(), c.live())).toList();
+    }
+
+    /** The last project an app sent this session, or null. */
+    public Received lastReceived() {
+        return lastReceived;
+    }
+
+    /** Sends the status to every app on the next {@link #tick()}, even if it went out less than a second ago. */
+    public void sendStatusNow() {
+        statusDirty = true;
+        lastStatus = 0;
     }
 
     public InstanceInfo info() {
@@ -235,10 +287,11 @@ public final class GameLink implements AutoCloseable {
             String type = Json.string(m.get("type"), "");
             switch (type) {
                 case "project" -> project(c, m);
-                case "refresh" -> events.add(new Event(() -> {
-                    statusDirty = true;
-                    lastStatus = 0;
-                }));
+                case "refresh" -> events.add(new Event(GameLink.this::sendStatusNow));
+                case "app-status" -> {
+                    c.appStatus(Json.string(m.get("project"), ""), Json.bool(m.get("live"), false));
+                    events.add(new Event(game::appsChanged));
+                }
                 default -> events.add(new Event(() -> game.other(c.app(), m)));
             }
         }
@@ -262,7 +315,10 @@ public final class GameLink implements AutoCloseable {
             try {
                 String rel = writeProject(file, data);
                 Path path = folder.resolve(rel);
-                events.add(new Event(() -> game.projectReceived(rel, path, name, open, c.app())));
+                events.add(new Event(() -> {
+                    lastReceived = new Received(rel, name, c.app(), open, Instant.now());
+                    game.projectReceived(rel, path, name, open, c.app());
+                }));
                 c.send(Map.of("type", "received", "file", rel, "open", open));
             } catch (IOException e) {
                 c.send(Map.of("type", "error", "message", "Could not save the project: " + e.getMessage()));

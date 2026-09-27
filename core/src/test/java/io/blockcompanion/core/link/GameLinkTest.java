@@ -159,6 +159,70 @@ class GameLinkTest {
     }
 
     @Test
+    void stopAndStartAgainKeepsTheInstance() throws IOException {
+        start();
+        String id = link.info().id(), token = link.info().token();
+        assertThat(link.running()).isTrue();
+        link.close();
+        assertThat(link.running()).isFalse();
+        assertThat(link.port()).isZero();
+        assertThat(InstanceInfo.list(dir.resolve("instances")).get(0).closed()).isTrue();
+
+        link.start();
+        assertThat(link.running()).isTrue();
+        assertThat(link.info().id()).isEqualTo(id);
+        assertThat(link.info().token()).isEqualTo(token);
+        assertThat(link.port()).isPositive();
+        // One file for the whole session, alive again.
+        assertThat(InstanceInfo.list(dir.resolve("instances"))).singleElement().satisfies(i -> {
+            assertThat(i.closed()).isFalse();
+            assertThat(i.port()).isEqualTo(link.port());
+        });
+        try (App app = new App(link.port())) {
+            app.send(Map.of("type", "hello", "token", token, "app", "Resource Tracker", "version", "1.2.0"));
+            assertThat(app.read()).containsEntry("type", "welcome");
+        }
+    }
+
+    @Test
+    void connectionDetailsAppStatusAndStatusNow() throws Exception {
+        start();
+        byte[] data = "p".getBytes(StandardCharsets.UTF_8);
+        try (App app = new App(link.port())) {
+            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "Resource Tracker", "version", "1.2.0"));
+            app.read();
+            app.send(Map.of("type", "app-status", "project", "Castle", "live", true));
+            app.send(Map.of("type", "ping"));
+            assertThat(app.read()).containsEntry("type", "pong");
+            assertThat(link.connections()).singleElement().satisfies(a -> {
+                assertThat(a.name()).isEqualTo("Resource Tracker");
+                assertThat(a.version()).isEqualTo("1.2.0");
+                assertThat(a.project()).isEqualTo("Castle");
+                assertThat(a.live()).isTrue();
+                assertThat(a.since()).isBeforeOrEqualTo(Instant.now());
+            });
+
+            // The status after the welcome goes out first; after that, sendStatusNow skips the one-second wait.
+            link.tick();
+            assertThat(app.read()).containsEntry("type", "status");
+            link.sendStatusNow();
+            link.tick();
+            assertThat(app.read()).containsEntry("type", "status");
+
+            assertThat(link.lastReceived()).isNull();
+            app.send(Map.of("type", "project", "file", "Castle.bdproj", "name", "Castle", "open", false, "data",
+                    Base64.getEncoder().encodeToString(data)));
+            assertThat(app.read()).containsEntry("type", "received");
+            link.tick();
+            assertThat(link.lastReceived()).satisfies(r -> {
+                assertThat(r.file()).isEqualTo("BlockDesigner/Castle.bdproj");
+                assertThat(r.app()).isEqualTo("Resource Tracker");
+                assertThat(r.open()).isFalse();
+            });
+        }
+    }
+
+    @Test
     void grabWithoutAppsSaysSo() {
         start();
         assertThat(link.requestGrab()).isFalse();
