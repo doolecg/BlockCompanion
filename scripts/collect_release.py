@@ -1,4 +1,4 @@
-"""Collect the six BlockCompanion release jars into build/release/<version>/ and check each one.
+"""Collect the seven BlockCompanion release jars into build/release/<version>/ and check each one.
 
     python scripts/collect_release.py            # after ./gradlew build
 
@@ -21,6 +21,7 @@ MODULES = [
     ("mc-1.21.1/fabric", "blockcompanion-fabric-1.21.1", "fabric.mod.json", r'"version"\s*:\s*"([^"]+)"'),
     ("mc-1.21.1/neoforge", "blockcompanion-neoforge-1.21.1", "META-INF/neoforge.mods.toml", r'(?m)^version\s*=\s*"([^"]+)"'),
     ("mc-26.2/fabric", "blockcompanion-fabric-26.2", "fabric.mod.json", r'"version"\s*:\s*"([^"]+)"'),
+    ("mc-26.2/neoforge", "blockcompanion-neoforge-26.2", "META-INF/neoforge.mods.toml", r'(?m)^version\s*=\s*"([^"]+)"'),
     ("mc-26.3/fabric", "blockcompanion-fabric-26.3", "fabric.mod.json", r'"version"\s*:\s*"([^"]+)"'),
     ("mc-26.3/neoforge", "blockcompanion-neoforge-26.3", "META-INF/neoforge.mods.toml", r'(?m)^version\s*=\s*"([^"]+)"'),
     ("paper", "blockcompanion-paper", "plugin.yml", r"(?m)^version:\s*'?\"?([^'\"\s]+)"),

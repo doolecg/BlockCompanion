@@ -1,4 +1,4 @@
-"""Publish a BlockCompanion GitHub release: the top section of RELEASE_NOTES.md plus the six jars.
+"""Publish a BlockCompanion GitHub release: the top section of RELEASE_NOTES.md plus the seven jars.
 
     python scripts/publish_release.py --dry-run   # check everything, change nothing
     python scripts/publish_release.py             # create the release (tag on main) and upload the jars
@@ -25,6 +25,7 @@ JARS = [
     "blockcompanion-fabric-1.21.1-{v}.jar",
     "blockcompanion-neoforge-1.21.1-{v}.jar",
     "blockcompanion-fabric-26.2-{v}.jar",
+    "blockcompanion-neoforge-26.2-{v}.jar",
     "blockcompanion-fabric-26.3-{v}.jar",
     "blockcompanion-neoforge-26.3-{v}.jar",
     "blockcompanion-paper-{v}.jar",

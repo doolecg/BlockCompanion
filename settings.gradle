@@ -18,8 +18,7 @@ rootProject.name = 'BlockCompanion'
 include 'core'
 // Bukkit-API plugin for Paper/Spigot/Bukkit servers.
 include 'paper'
-// Minecraft 1.21.1, 26.2 and 26.3: Architectury multiloader (common + Fabric + NeoForge). NeoForge made no 26.2 build,
-// so 26.2 is Fabric only.
+// Minecraft 1.21.1, 26.2 and 26.3: Architectury multiloader (common + Fabric + NeoForge).
 include 'mc-1.21.1:common', 'mc-1.21.1:fabric', 'mc-1.21.1:neoforge'
-include 'mc-26.2:common', 'mc-26.2:fabric'
+include 'mc-26.2:common', 'mc-26.2:fabric', 'mc-26.2:neoforge'
 include 'mc-26.3:common', 'mc-26.3:fabric', 'mc-26.3:neoforge'

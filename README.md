@@ -26,7 +26,7 @@ editor for Minecraft builds) saves, whole projects included, and saves builds fr
 BlockDesigner opens. With BlockDesigner's Resource Tracker plugin it links live: send the project you're working on
 into the game, see the game follow your edits, and see in the app what is built and what your chests hold.
 
-It is a client mod for **Fabric** and **NeoForge** on **Minecraft 1.21.1 and 26.3** (and Fabric on 26.2), plus a
+It is a client mod for **Fabric** and **NeoForge** on **Minecraft 1.21.1, 26.2 and 26.3**, plus a
 **Paper/Spigot/Bukkit** plugin for servers without mods. It is in early development; the [plan](docs/plan.md) lists
 what comes next.
 
@@ -42,11 +42,12 @@ release has one jar per loader and Minecraft version:
 | `blockcompanion-fabric-1.21.1-<version>.jar` | Fabric, Minecraft 1.21.1 (needs [Fabric API](https://modrinth.com/mod/fabric-api)) |
 | `blockcompanion-neoforge-1.21.1-<version>.jar` | NeoForge, Minecraft 1.21.1 |
 | `blockcompanion-fabric-26.2-<version>.jar` | Fabric, Minecraft 26.2 (needs Fabric API) |
+| `blockcompanion-neoforge-26.2-<version>.jar` | NeoForge, Minecraft 26.2 |
 | `blockcompanion-fabric-26.3-<version>.jar` | Fabric, Minecraft 26.3 (needs Fabric API) |
 | `blockcompanion-neoforge-26.3-<version>.jar` | NeoForge, Minecraft 26.3 |
 | `blockcompanion-paper-<version>.jar` | Paper, Spigot or Bukkit servers (goes in `plugins`) |
 
-1. Download the jar for your loader and Minecraft version (NeoForge made no 26.2 version, so 26.2 is Fabric only).
+1. Download the jar for your loader and Minecraft version.
    Or let BlockDesigner do it: Resource Tracker's **Install mod…** puts the right jar into a game's `mods` folder.
 2. Put it in your `mods` folder.
 3. Put your BlockDesigner projects (`.bdproj`) and schematics in `<game folder>/blockcompanion/schematics` (the folder
@@ -305,12 +306,13 @@ The jars end up in:
 | `mc-1.21.1/fabric/build/libs/blockcompanion-fabric-1.21.1-<version>.jar` | Fabric, Minecraft 1.21.1 |
 | `mc-1.21.1/neoforge/build/libs/blockcompanion-neoforge-1.21.1-<version>.jar` | NeoForge, Minecraft 1.21.1 |
 | `mc-26.2/fabric/build/libs/blockcompanion-fabric-26.2-<version>.jar` | Fabric, Minecraft 26.2 |
+| `mc-26.2/neoforge/build/libs/blockcompanion-neoforge-26.2-<version>.jar` | NeoForge, Minecraft 26.2 |
 | `mc-26.3/fabric/build/libs/blockcompanion-fabric-26.3-<version>.jar` | Fabric, Minecraft 26.3 |
 | `mc-26.3/neoforge/build/libs/blockcompanion-neoforge-26.3-<version>.jar` | NeoForge, Minecraft 26.3 |
 | `paper/build/libs/blockcompanion-paper-<version>.jar` | Paper/Spigot/Bukkit plugin |
 
 To try it in a development game: `./gradlew :mc-1.21.1:fabric:runClient` (or `:mc-1.21.1:neoforge:runClient`,
-`:mc-26.2:fabric:runClient`, `:mc-26.3:fabric:runClient`, `:mc-26.3:neoforge:runClient`). `./gradlew :paper:runServer` starts a Paper 1.21.1
+`:mc-26.2:fabric:runClient`, `:mc-26.2:neoforge:runClient`, `:mc-26.3:fabric:runClient`, `:mc-26.3:neoforge:runClient`). `./gradlew :paper:runServer` starts a Paper 1.21.1
 test server with the plugin in `paper/run`. The version is `mod_version` in `gradle.properties`.
 
 ### Tests
@@ -336,7 +338,7 @@ check, pausing and the server's own checks), the live link (instance files, the 
 | `core/` | Plain Java 21, no Minecraft classes: formats (`formats`, `nbt`), BlockDesigner projects (`project`), the block model (`model`), transforms (`transform`), placement, layers, locks, saved placements, the selection and ray picking (`placement`), comparing (`compare`), item counting (`items`), build progress and the progress file (`progress`), easy place planning (`easyplace`), AutoBuild planning and running (`autobuild`), the schematic folder (`library`), linked chests (`chests`), the HUD layout (`hud`), the live link (`link`) and the sync protocol (`sync`) |
 | `mc-1.21.1/common` | Minecraft 1.21.1 client code shared by both loaders: rendering, input, screens, mixins |
 | `mc-1.21.1/fabric`, `mc-1.21.1/neoforge` | 1.21.1 entry points and mod metadata |
-| `mc-26.2/common`, `mc-26.2/fabric` | The same for Minecraft 26.2 (Fabric only: NeoForge made no 26.2 build) |
+| `mc-26.2/common`, `mc-26.2/fabric`, `mc-26.2/neoforge` | The same for Minecraft 26.2 |
 | `mc-26.3/common`, `mc-26.3/fabric`, `mc-26.3/neoforge` | The same for Minecraft 26.3 |
 | `paper/` | The Bukkit-API server plugin |
 | `docs/plan.md` | The milestones and their status |

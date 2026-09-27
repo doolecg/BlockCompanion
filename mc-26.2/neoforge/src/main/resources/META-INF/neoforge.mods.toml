@@ -1,0 +1,31 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "MIT"
+issueTrackerURL = "https://github.com/doolecg/BlockCompanion/issues"
+
+[[mods]]
+modId = "blockcompanion"
+version = "${version}"
+displayName = "BlockCompanion"
+authors = "doole"
+displayURL = "https://github.com/doolecg/BlockCompanion"
+description = '''
+A light schematic helper: ghost blocks, Create-style placement, layers and a resource list. The in-game companion to BlockDesigner.
+'''
+
+[[mixins]]
+config = "blockcompanion.mixins.json"
+
+[[dependencies.blockcompanion]]
+modId = "neoforge"
+type = "required"
+versionRange = "[26.2,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.blockcompanion]]
+modId = "minecraft"
+type = "required"
+versionRange = "[26.2,26.3)"
+ordering = "NONE"
+side = "BOTH"

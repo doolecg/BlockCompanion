@@ -1,7 +1,7 @@
 # BlockCompanion: plan
 
 Status (2026-09-27): **Milestone 1 built, waiting for the in-game check by hand.** The core library, Minecraft 1.21.1
-and 26.3 (Fabric + NeoForge each), 26.2 (Fabric only: NeoForge made no 26.2 version) and the Paper plugin build; every
+and 26.3 (Fabric + NeoForge each), 26.2 (Fabric, and NeoForge since 0.3.2) and the Paper plugin build; every
 client was launched into a world with saved placements and passed the easy-place self-test. The building experience,
 several placements at once, the new HUD and screens, linked chests and the live link to BlockDesigner are built too.
 See each milestone's checklist and [Round 2](#round-2-several-placements-hud-chests-and-the-live-link).

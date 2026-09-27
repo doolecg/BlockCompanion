@@ -1,3 +1,14 @@
+# BlockCompanion 0.3.2
+
+BlockCompanion now runs on NeoForge for Minecraft 26.2 too. For Minecraft 1.21.1, 26.2 and 26.3 on Fabric and NeoForge,
+and the Paper plugin.
+
+## New
+- **NeoForge on Minecraft 26.2:** a new `blockcompanion-neoforge-26.2` jar. It has everything the other versions have,
+  and the in-game updater keeps it up to date like the rest.
+
+---
+
 # BlockCompanion 0.3.1
 
 For Minecraft 1.21.1 and 26.3 on Fabric and NeoForge, 26.2 on Fabric, and the Paper plugin.

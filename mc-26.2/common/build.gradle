@@ -1,5 +1,5 @@
 architectury {
-    common 'fabric'
+    common 'fabric', 'neoforge'
 }
 
 // The core library is compiled into common, so the platform jars bundle it along with the rest of common.
