@@ -1,0 +1,41 @@
+// BlockCompanion: one build for the core library, the Paper plugin and the Fabric/NeoForge mods for each Minecraft
+// version. Each mc-<version> folder is an Architectury multiloader group (common, fabric, neoforge); its build.gradle
+// holds the settings the three share.
+plugins {
+    id 'dev.architectury.loom' version '1.17.493' apply false
+    id 'dev.architectury.loom-no-remap' version '1.17.493' apply false
+    id 'architectury-plugin' version '3.5.170' apply false
+    id 'com.gradleup.shadow' version '9.4.3' apply false
+}
+
+allprojects {
+    group = rootProject.maven_group
+    version = rootProject.mod_version
+}
+
+// Loom's IDE run configs need two fix-ups, done after each module's ideaSyncTask:
+// - Module name: Loom writes the Gradle path (BlockCompanion.mc-1.21.1.fabric.main), but IntelliJ turns the dots in the
+//   mc-<version> folder names into underscores (BlockCompanion.mc-1_21_1.fabric.main). Left alone, the config points
+//   at a module that does not exist.
+// - JDK: without one set, IntelliJ launches with whatever JDK it picks (21 even for 26.3, whose JVM flags need 25).
+//   Each config gets the module's own toolchain JDK.
+subprojects {
+    tasks.matching { it.name == 'ideaSyncTask' }.configureEach {
+        def runConfigDir = rootProject.file('.idea/runConfigurations')
+        def gradleModule = "${rootProject.name}${project.path.replace(':', '.')}.main"
+        def ideaModule = gradleModule.replaceAll(/mc-\d+(\.\d+)*/) { it[0].replace('.', '_') }
+        def launcher = project.javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(project.java_version as int) }
+        doLast {
+            def jdk = launcher.get().metadata.installationPath.asFile.absolutePath
+            def jreOptions = "<option name=\"ALTERNATIVE_JRE_PATH_ENABLED\" value=\"true\"/>\n" +
+                "    <option name=\"ALTERNATIVE_JRE_PATH\" value=\"${jdk}\"/>\n    "
+            runConfigDir.listFiles()?.findAll { it.name.endsWith('.xml') }?.each { file ->
+                def text = file.getText('UTF-8')
+                if (!text.contains("<module name=\"${gradleModule}\"/>")) return
+                def fixed = text.replace("<module name=\"${gradleModule}\"/>", "<module name=\"${ideaModule}\"/>")
+                if (!fixed.contains('ALTERNATIVE_JRE_PATH')) fixed = fixed.replace('<option name="MAIN_CLASS_NAME"', jreOptions + '<option name="MAIN_CLASS_NAME"')
+                file.write(fixed, 'UTF-8')
+            }
+        }
+    }
+}

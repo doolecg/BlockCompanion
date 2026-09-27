@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "blockcompanion",
+  "version": "${version}",
+  "name": "BlockCompanion",
+  "description": "A light schematic helper: ghost blocks, Create-style placement, layers and a resource list. The in-game companion to BlockDesigner.",
+  "authors": ["doole"],
+  "contact": {
+    "homepage": "https://github.com/doolecg/BlockCompanion",
+    "sources": "https://github.com/doolecg/BlockCompanion",
+    "issues": "https://github.com/doolecg/BlockCompanion/issues"
+  },
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["io.blockcompanion.fabric.BlockCompanionFabricSync"],
+    "client": ["io.blockcompanion.fabric.BlockCompanionFabricClient", "io.blockcompanion.fabric.BlockCompanionFabricSyncClient"],
+    "modmenu": ["io.blockcompanion.fabric.BlockCompanionModMenu"]
+  },
+  "mixins": ["blockcompanion.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}

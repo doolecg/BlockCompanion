@@ -1,0 +1,66 @@
+plugins {
+    id 'com.gradleup.shadow'
+}
+
+architectury {
+    platformSetupLoomIde()
+    fabric()
+}
+
+// Readable names for the IDE run configs Loom generates.
+loom {
+    runs {
+        client {
+            configName = '1.21.1 Fabric Client'
+        }
+        server {
+            configName = '1.21.1 Fabric Server'
+        }
+    }
+}
+
+configurations {
+    common {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentFabric.extendsFrom common
+
+    // Bundled into the mod jar by Shadow.
+    shadowBundle {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+}
+
+repositories {
+    // Mod Menu, for the settings button in its mod list (optional at runtime).
+    maven { url = 'https://maven.terraformersmc.com/releases/' }
+}
+
+dependencies {
+    modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+
+    common(project(path: ':mc-1.21.1:common', configuration: 'namedElements')) { transitive = false }
+    shadowBundle project(path: ':mc-1.21.1:common', configuration: 'transformProductionFabric')
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand version: inputs.properties.version
+    }
+}
+
+shadowJar {
+    configurations = [project.configurations.shadowBundle]
+    archiveClassifier = 'dev-shadow'
+}
+
+remapJar {
+    inputFile.set shadowJar.archiveFile
+}

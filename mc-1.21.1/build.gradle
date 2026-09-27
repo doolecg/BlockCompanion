@@ -1,0 +1,32 @@
+// Minecraft 1.21.1: shared setup for common, fabric and neoforge (Architectury Loom with Mojang mappings).
+subprojects {
+    apply plugin: 'dev.architectury.loom'
+    apply plugin: 'architectury-plugin'
+
+    architectury {
+        minecraft = project.minecraft_version
+    }
+
+    base {
+        archivesName = "${rootProject.archives_name}-${project.name}-${project.minecraft_version}"
+    }
+
+    loom {
+        silentMojangMappingsLicense()
+    }
+
+    dependencies {
+        minecraft "net.minecraft:minecraft:${project.minecraft_version}"
+        mappings loom.officialMojangMappings()
+    }
+
+    java {
+        toolchain.languageVersion = JavaLanguageVersion.of(project.java_version as int)
+        withSourcesJar()
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = project.java_version as int
+    }
+}

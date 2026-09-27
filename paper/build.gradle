@@ -1,0 +1,50 @@
+// Bukkit-API plugin for Paper, Spigot and Bukkit: the shared space (server sync, milestone 2) over plugin messaging on
+// blockcompanion:main, using the same core protocol as the mods.
+plugins {
+    id 'java'
+    // runServer: a Paper test server in paper/run with this plugin loaded.
+    id 'xyz.jpenilla.run-paper' version '3.1.0'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+base {
+    archivesName = 'blockcompanion-paper'
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+}
+
+dependencies {
+    // Only Bukkit API calls are used, so the jar also runs on Spigot and plain Bukkit.
+    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
+    implementation project(':core')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('plugin.yml') {
+        expand version: inputs.properties.version
+    }
+}
+
+// The core classes go into the plugin jar (the server has no other copy of them).
+jar {
+    dependsOn ':core:jar'
+    from { project(':core').sourceSets.main.output }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.named('runServer') {
+    minecraftVersion '1.21.1'
+    runDirectory = file('run')
+}

@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "package": "io.blockcompanion.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "client": [
+    "BlockItemInvoker",
+    "LevelExtractorMixin",
+    "MinecraftMixin",
+    "MouseHandlerMixin"
+  ],
+  "mixins": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

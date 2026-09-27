@@ -1,0 +1,11 @@
+architectury {
+    common 'fabric', 'neoforge'
+}
+
+// The core library is compiled into common, so the platform jars bundle it along with the rest of common.
+sourceSets.main.java.srcDir rootProject.file('core/src/main/java')
+
+dependencies {
+    // Only for Fabric's @Environment annotations, which Architectury remaps per platform. No other Fabric Loader classes.
+    modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+}

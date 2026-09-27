@@ -1,0 +1,33 @@
+name: BlockCompanion
+version: '${version}'
+main: io.blockcompanion.paper.BlockCompanionPlugin
+api-version: '1.21'
+description: Server side of BlockCompanion - a shared space for schematics, placements and locks.
+author: doole
+website: https://github.com/doolecg/BlockCompanion
+commands:
+  blockcompanion:
+    description: Shows the shared space's status, or reloads its config.
+    usage: /<command> [info|reload]
+    permission: blockcompanion.admin
+permissions:
+  blockcompanion.use:
+    description: See shared schematics and placements, and download schematics.
+    default: true
+  blockcompanion.upload:
+    description: Upload schematics to the shared space (within the quota).
+    default: true
+  blockcompanion.place:
+    description: Share placements, and move or delete placements that are not locked.
+    default: true
+  blockcompanion.lock:
+    description: Lock and unlock your own placements.
+    default: true
+  blockcompanion.admin:
+    description: Ignore locks, delete anything, no per-player quota, reload the config.
+    default: op
+    children:
+      blockcompanion.use: true
+      blockcompanion.upload: true
+      blockcompanion.place: true
+      blockcompanion.lock: true
