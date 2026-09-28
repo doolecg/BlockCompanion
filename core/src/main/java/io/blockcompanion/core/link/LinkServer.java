@@ -130,7 +130,7 @@ public final class LinkServer implements AutoCloseable {
             this.out = socket.getOutputStream();
         }
 
-        /** The app's name from its hello, e.g. "BlockDesigner Resource Tracker". */
+        /** The app's name from its hello, e.g. "BlockDesigner BlockCompanion Plugin". */
         public String app() {
             return app;
         }

@@ -1,6 +1,6 @@
 # Progress file format
 
-BlockCompanion writes how far each loaded schematic is built to a small JSON file. BlockDesigner's Resource Tracker
+BlockCompanion writes how far each loaded schematic is built to a small JSON file. BlockDesigner's BlockCompanion Plugin
 plugin reads these files to show in-game progress next to its own counts. This is the file link of
 [Milestone 4](plan.md#milestone-4-resource-tracker-link); a live localhost link is still planned.
 
@@ -53,7 +53,7 @@ never sees a half-written file.
 | `correct` | Blocks placed correctly, with the same leniency as the in-game compare: the right block, facing and half; connections, waterlogging and the like don't matter, and grass, flowers, water and snow count as empty. |
 | `wrong` | Cells holding a different block (or the right block turned the wrong way). |
 | `missing` | `total - correct - wrong`: cells still empty, including cells in chunks the game has never loaded. |
-| `items` | Per item id: `needed`, how many items the whole schematic takes, and `placed`, how many of those are represented by correctly placed blocks. Counted with the same rules as the in-game resource list and Resource Tracker: a double slab is two slabs, a door or bed one item for both halves, crops their seeds, wall torches torches, and so on. |
+| `items` | Per item id: `needed`, how many items the whole schematic takes, and `placed`, how many of those are represented by correctly placed blocks. Counted with the same rules as the in-game resource list and BlockCompanion Plugin: a double slab is two slabs, a door or bed one item for both halves, crops their seeds, wall torches torches, and so on. |
 
 `items` covers blocks only. The in-game resource list also shows the entities a schematic needs (item frames,
 armour stands, paintings); they are not in the file.
@@ -61,7 +61,7 @@ armour stands, paintings); they are not in the file.
 ## Matching the app's counts
 
 The game loads a project with its **visible layers merged** (hidden layers are left out), and counts that. The app's
-`needed` numbers line up with the file's when Resource Tracker counts **"All visible layers"**.
+`needed` numbers line up with the file's when BlockCompanion Plugin counts **"All visible layers"**.
 
 ## How the game keeps it up to date
 

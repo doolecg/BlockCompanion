@@ -52,7 +52,7 @@ final class LinkPanel {
         list.header("Link options");
         list.option("Start with the game", "Turn the link on every time the game starts, so BlockDesigner can always find it.",
                 Ui.toggle(c.link, v -> c.link = v, "Off: the link only runs after you press Start link."));
-        list.option("Progress file", "Writes each build's progress to ~/.blockcompanion/progress for Resource Tracker, link or not.",
+        list.option("Progress file", "Writes each build's progress to ~/.blockcompanion/progress for the BlockCompanion Plugin, link or not.",
                 Ui.toggle(c.progressFile, v -> c.progressFile = v, null));
         list.option("In BlockDesigner", "Materials panel > Game link lists this game: tick it, then press Send or Live there.");
     }
@@ -78,7 +78,7 @@ final class LinkPanel {
         return switch (ClientLink.state()) {
             case OFF -> ClientLink.problem().isEmpty() ? "BlockDesigner can't see this game. Start the link to let it connect."
                     : ClientLink.problem();
-            case WAITING -> "Open Resource Tracker in BlockDesigner: it finds this game within a few seconds (port " + ClientLink.port() + ").";
+            case WAITING -> "Open the BlockCompanion Plugin in BlockDesigner: it finds this game within a few seconds (port " + ClientLink.port() + ").";
             case CONNECTED -> {
                 List<GameLink.App> apps = ClientLink.connections();
                 yield apps.isEmpty() ? "" : "Connected for " + ago(apps.get(0).since()) + ", port " + ClientLink.port()

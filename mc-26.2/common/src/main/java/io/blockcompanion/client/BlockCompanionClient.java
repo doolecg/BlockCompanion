@@ -158,7 +158,7 @@ public final class BlockCompanionClient {
      */
     public static void startLink() {
         ClientLink.start(library.root(), loader, modVersion);
-        if (ClientLink.running()) actionBar("Link on: BlockDesigner's Resource Tracker finds this game in a few seconds");
+        if (ClientLink.running()) actionBar("Link on: BlockDesigner's BlockCompanion Plugin finds this game in a few seconds");
         else actionBar("The link could not start: " + ClientLink.problem());
     }
 
@@ -395,14 +395,14 @@ public final class BlockCompanionClient {
         actionBar("Selected " + active.shortName() + " (" + (PLACEMENTS.indexOf(active) + 1) + " of " + PLACEMENTS.size() + ")");
     }
 
-    /** Asks BlockDesigner for its open project (Resource Tracker answers with it). */
+    /** Asks BlockDesigner for its open project (BlockCompanion Plugin answers with it). */
     public static void grab() {
         if (!ClientLink.running()) {
             actionBar("The BlockDesigner link is off: start it on the schematic screen's BlockDesigner step");
             return;
         }
         if (ClientLink.grab()) actionBar("Asked BlockDesigner for its project...");
-        else actionBar("BlockDesigner isn't connected: open Resource Tracker's Game link there and connect to this game");
+        else actionBar("BlockDesigner isn't connected: open the BlockCompanion Plugin there and connect to this game");
     }
 
     /** Development check of easy place, progress and the progress file; see {@link PlaceSelfTest}. */
@@ -910,7 +910,7 @@ public final class BlockCompanionClient {
      */
     public static void editInBlockDesigner(LoadedPlacement lp) {
         if (ClientLink.state() != ClientLink.State.CONNECTED) {
-            actionBar("BlockDesigner isn't connected: open Resource Tracker's Game link there and connect to this game");
+            actionBar("BlockDesigner isn't connected: open the BlockCompanion Plugin there and connect to this game");
             return;
         }
         try {

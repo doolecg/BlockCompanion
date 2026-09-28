@@ -558,7 +558,7 @@ public final class LibraryScreen extends Screen {
         ClientConfig c = BlockCompanionClient.config();
         int cy = py + ph - 25, tw = 110;
         addRenderableWidget(CycleButton.onOffBuilder(c.countChests)
-                .withTooltip(v -> Tooltip.create(Component.literal("What your linked chests hold counts here, in the info panel and in Resource Tracker.")))
+                .withTooltip(v -> Tooltip.create(Component.literal("What your linked chests hold counts here, in the info panel and in the BlockCompanion Plugin.")))
                 .create(px + pw - 6 - tw, cy, tw, 20, Component.literal("Chests"), (b, v) -> {
                     c.countChests = v;
                     BlockCompanionClient.configChanged();
@@ -697,7 +697,7 @@ public final class LibraryScreen extends Screen {
                 editButton.active = link == ClientLink.State.CONNECTED;
                 String tip = switch (link) {
                     case OFF -> "The link to BlockDesigner is off: start it on the BlockDesigner step.";
-                    case WAITING -> "BlockDesigner isn't connected: open Resource Tracker's Game link there.";
+                    case WAITING -> "BlockDesigner isn't connected: open the BlockCompanion Plugin there.";
                     case CONNECTED -> "Opens it in BlockDesigner as the current project. It then follows BlockDesigner: "
                             + "your changes there show up here live.";
                 };
@@ -779,7 +779,7 @@ public final class LibraryScreen extends Screen {
             case SOURCE -> server ? "Shared on this server" : BlockCompanionClient.library().root().toString();
             case PLACEMENT -> BlockCompanionClient.placements().size() + " loaded in this world";
             case RESOURCES -> "What the build still needs";
-            case LINK -> "Live link to BlockDesigner's Resource Tracker";
+            case LINK -> "Live link to BlockDesigner's BlockCompanion Plugin";
         };
         Ui.titleBar(g, font, title, note, width);
 

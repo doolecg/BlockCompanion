@@ -147,11 +147,11 @@ public final class ClientConfig {
     /** Fireworks and a summary when the whole schematic is done. */
     public boolean finishCelebration = true;
 
-    /** Writes the shared progress file for BlockDesigner's Resource Tracker ({@code ~/.blockcompanion/progress}). */
+    /** Writes the shared progress file for BlockDesigner's BlockCompanion Plugin ({@code ~/.blockcompanion/progress}). */
     public boolean progressFile = true;
-    /** The live link: BlockDesigner (Resource Tracker) can find this game, send projects and see progress. */
+    /** The live link: BlockDesigner (BlockCompanion Plugin) can find this game, send projects and see progress. */
     public boolean link = true;
-    /** Linked chests count in the resource list, the info panel and Resource Tracker. */
+    /** Linked chests count in the resource list, the info panel and the BlockCompanion Plugin. */
     public boolean countChests = true;
 
     /** Ghost, mark, box and outline colours, set on the settings screen's Colours tab. */

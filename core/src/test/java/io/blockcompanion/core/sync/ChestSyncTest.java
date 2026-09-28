@@ -269,11 +269,11 @@ class ChestSyncTest {
     @Test
     void appFilesReplaceSharedPlacementsOfTheSameName() throws IOException {
         send(alice, new Message.Hello(Protocol.VERSION, "client", 0));
-        String v1 = server.addFromApp("Tower.bdproj", new byte[]{1, 2, 3}, "Resource Tracker");
+        String v1 = server.addFromApp("Tower.bdproj", new byte[]{1, 2, 3}, "BlockCompanion Plugin");
         send(alice, new Message.PlacementCreate(1, v1, SyncServerTest.POSE));
         UUID id = alice.last(Message.PlacementCreated.class).id();
 
-        String v2 = server.addFromApp("Tower.bdproj", new byte[]{4, 5, 6}, "Resource Tracker");
+        String v2 = server.addFromApp("Tower.bdproj", new byte[]{4, 5, 6}, "BlockCompanion Plugin");
         assertThat(v2).isNotEqualTo(v1);
         assertThat(server.store().placement(id).hash()).isEqualTo(v2);
         assertThat(alice.last(Message.PlacementUpdate.class).placement().hash()).isEqualTo(v2);

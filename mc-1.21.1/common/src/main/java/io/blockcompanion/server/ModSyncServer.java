@@ -35,7 +35,7 @@ import java.util.UUID;
  * opened to LAN). The loader entry points forward server start/stop, ticks, logouts and incoming payloads here; the
  * logic is the core {@link SyncServer}, the same one the Paper plugin runs. Data lives in {@code <world>/blockcompanion/},
  * settings in {@code config/blockcompanion-server.properties}. Linked chests are read and emptied through
- * {@link ModChestAccess}, and AutoBuild places blocks through {@link ModBuildWorld}. A dedicated server also opens the BlockDesigner link, so Resource Tracker on the same computer
+ * {@link ModChestAccess}, and AutoBuild places blocks through {@link ModBuildWorld}. A dedicated server also opens the BlockDesigner link, so BlockCompanion Plugin on the same computer
  * can send projects straight into the shared space. No client classes: safe on a dedicated server.
  */
 public final class ModSyncServer {

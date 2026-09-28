@@ -1,6 +1,6 @@
 # Live link protocol
 
-How BlockDesigner (its Resource Tracker plugin) talks to running games and servers on the same computer: finding them,
+How BlockDesigner (its BlockCompanion Plugin) talks to running games and servers on the same computer: finding them,
 sending projects, following progress and linked chests, and installing the mod. The game side is
 `io.blockcompanion.core.link` (`GameLink`, `LinkServer`, `InstanceInfo`).
 
@@ -42,7 +42,7 @@ removed a week after their last update. Only the user can read their home folder
 TCP to `127.0.0.1:<port>`, one JSON object per line (UTF-8, `\n`). The app speaks first:
 
 ```json
-{"type": "hello", "token": "…", "app": "Resource Tracker", "version": "1.2.0"}
+{"type": "hello", "token": "…", "app": "BlockCompanion Plugin", "version": "1.2.0"}
 ```
 
 A wrong or missing token gets `{"type": "error", …}` and the connection closes. Otherwise the game answers
@@ -88,7 +88,7 @@ its own. Nothing in the protocol needs to change for that.
   the app reports with `app-status`.
 - **Get project** sends `grab`; **Send now** sends the `status` straight away instead of waiting for the next change.
 
-What the app side (Resource Tracker) would need for the rest: it reconnects about 10 seconds after a connection closes
+What the app side (BlockCompanion Plugin) would need for the rest: it reconnects about 10 seconds after a connection closes
 and every 2 seconds finds new games, so a game that is stopped and started again comes back by itself. To show the
 project open in BlockDesigner in the game before anything is sent, the app has to send `app-status` (above); until it
 does, the game shows the last project it received instead.

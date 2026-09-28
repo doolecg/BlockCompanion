@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Mirrors Resource Tracker's TallyTest, with a placement standing in for a BlockDesigner layer. */
+/** Mirrors BlockCompanion Plugin's TallyTest, with a placement standing in for a BlockDesigner layer. */
 class ItemCountTest {
     private static Map<String, Long> asMap(List<ItemCount.Need> needs) {
         return needs.stream().collect(Collectors.toMap(ItemCount.Need::item, ItemCount.Need::count));

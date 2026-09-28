@@ -23,7 +23,7 @@ BlockCompanion shows a schematic in your world as ghost blocks so you can build 
 [Litematica](https://modrinth.com/mod/litematica) does for placing and checking a build, with less on screen and
 simpler controls. It reads the schematics [BlockDesigner](https://github.com/doolecg/BlockDesigner) (the Windows
 editor for Minecraft builds) saves, whole projects included, and saves builds from the world back as `.schem` files
-BlockDesigner opens. With BlockDesigner's Resource Tracker plugin it links live: send the project you're working on
+BlockDesigner opens. With BlockDesigner's BlockCompanion Plugin it links live: send the project you're working on
 into the game, see the game follow your edits, and see in the app what is built and what your chests hold.
 
 It is a client mod for **Fabric** and **NeoForge** on **Minecraft 1.21.1, 26.2 and 26.3**, plus a
@@ -48,7 +48,7 @@ release has one jar per loader and Minecraft version:
 | `blockcompanion-paper-<version>.jar` | Paper, Spigot or Bukkit servers (goes in `plugins`) |
 
 1. Download the jar for your loader and Minecraft version.
-   Or let BlockDesigner do it: Resource Tracker's **Install mod…** puts the right jar into a game's `mods` folder.
+   Or let BlockDesigner do it: BlockCompanion Plugin's **Install mod…** puts the right jar into a game's `mods` folder.
 2. Put it in your `mods` folder.
 3. Put your BlockDesigner projects (`.bdproj`) and schematics in `<game folder>/blockcompanion/schematics` (the folder
    is made the first time you start the game, and the load screen has an **Open folder** button).
@@ -192,7 +192,7 @@ release has one jar per loader and Minecraft version:
   unlink. What's inside is counted when you link it and each time you close it after opening it, and stays as it was
   until you open it again. What AutoBuild and easy place's restock take out comes off the count by itself. On a
   server without BlockCompanion only chests you open are counted. They count as materials here, in the info panel and in
-  Resource Tracker. It counts items the way Resource Tracker does: a double slab
+  BlockCompanion Plugin. It counts items the way BlockCompanion Plugin does: a double slab
   is two slabs, a door one item, crops their seeds, wall torches torches.
 - **AutoBuild:** when your linked chests hold everything a placement still needs, **Start AutoBuild** in the
   schematic screen's Resources step has the server build it for you, like Create's Schematicannon: block by block, each
@@ -230,36 +230,36 @@ release has one jar per loader and Minecraft version:
   server, `blockcompanion.autobuild` on Paper), cap its speed (`autoBuildMaxBlocksPerSecond`), allow breaking blocks
   (`autoBuildReplace`: nothing by default on a server, everything in singleplayer) and keep it within a radius of the
   player (`autoBuildMaxRadius`). When the server allows less than you picked, it says so as the build starts.
-- **Live link to BlockDesigner:** while it runs, BlockDesigner's Resource Tracker finds the game, sends projects to it
+- **Live link to BlockDesigner:** while it runs, BlockDesigner's BlockCompanion Plugin finds the game, sends projects to it
   and follows your placements, progress and linked chests. Start and stop it on the schematic screen's BlockDesigner
   step (or the settings); **Start with the game** decides whether it starts by itself. See the
   [link protocol](docs/link-protocol.md).
-- **Resource Tracker link (files):** the progress of each loaded schematic is written to
-  `~/.blockcompanion/progress/` for BlockDesigner's Resource Tracker plugin. The [progress file format](docs/progress-format.md)
+- **BlockCompanion Plugin link (files):** the progress of each loaded schematic is written to
+  `~/.blockcompanion/progress/` for BlockDesigner's BlockCompanion Plugin. The [progress file format](docs/progress-format.md)
   describes it.
 
 ### Live link to BlockDesigner
 
-With BlockDesigner open and its Resource Tracker plugin (1.2.0 or later) on, the game and the app find each other on
+With BlockDesigner open and its BlockCompanion Plugin (1.2.0 or later) on, the game and the app find each other on
 this computer; the [link protocol](docs/link-protocol.md) describes how.
 
 - **Send to game:** the project open in BlockDesigner appears in front of you in the game (saved as
-  `schematics/BlockDesigner/<name>.bdproj`). Games and servers are listed in Resource Tracker, active or disconnected;
+  `schematics/BlockDesigner/<name>.bdproj`). Games and servers are listed in BlockCompanion Plugin, active or disconnected;
   tick the ones projects go to.
-- **Live:** with Live on in Resource Tracker, every change you make in BlockDesigner reaches the game a moment later and
+- **Live:** with Live on in BlockCompanion Plugin, every change you make in BlockDesigner reaches the game a moment later and
   the ghosts follow. Each loaded project has its own **Live** switch in the schematic list.
 - **Grab from BD** in the schematic list (or its key) asks BlockDesigner for the project it has open.
 - **Edit in BlockDesigner** (top right of a placement on the schematic screen's Placement step) opens that schematic
   in BlockDesigner as its project. The placement then follows it where it stands: same position, turn, mirroring and
   locks, with Live on, so every change you make in BlockDesigner shows up on it. Needs the app connected (and a Resource
   Tracker that knows edits).
-- **Back to the app:** what is loaded, how far each build is and what your linked chests hold show in Resource Tracker;
+- **Back to the app:** what is loaded, how far each build is and what your linked chests hold show in BlockCompanion Plugin;
   chest contents count as gathered there.
-- **Textures:** Resource Tracker's **Use its textures** shows blocks in BlockDesigner with the game's resource packs,
+- **Textures:** BlockCompanion Plugin's **Use its textures** shows blocks in BlockDesigner with the game's resource packs,
   and the server's (needs BlockDesigner 0.4.24).
 - **Servers** on the same computer (Fabric, NeoForge or Paper) take projects straight into their shared schematics;
   shared placements of an earlier version switch to the new one for everyone following them.
-- **Install mod…** in Resource Tracker puts the latest BlockCompanion into a game's `mods` folder (or a Paper server's
+- **Install mod…** in BlockCompanion Plugin puts the latest BlockCompanion into a game's `mods` folder (or a Paper server's
   `plugins`).
 
 ### Settings
@@ -296,7 +296,7 @@ Everything is also in `config/blockcompanion.properties` (written with the defau
 | `effects.particles`, `effects.sounds` | true | sparkles, sounds |
 | `effects.layerCelebration`, `layers.autoAdvance` | true | layer toast, and stepping to the next layer |
 | `effects.finishCelebration` | true | fireworks and the summary |
-| `progress.file` | true | writes the progress file for Resource Tracker |
+| `progress.file` | true | writes the progress file for BlockCompanion Plugin |
 | `link.enabled` | true | starts the live link to BlockDesigner with the game |
 | `scroll.move.modifier`, `scroll.rotate.modifier`, `placement.reach` | SHIFT, CTRL, 96 | held while scrolling at a box: the tool's mode (move or mirror), and turning; both together switch the mode. How far looking at a box counts |
 | `tool.requiredToMove`, `tool.mode` | true, MOVE | moving only with the tool in hand; what the move modifier does (`MOVE` or `MIRROR`) |
@@ -361,7 +361,7 @@ The tests cover the core library: reading and writing every format (including ro
 BlockDesigner's `testdata` folder when that repository sits next to this one), BlockDesigner projects in formats 1 and 2
 (a real format 1 project, and layers checked against BlockDesigner's own placement rule), saving `.schem` files with
 block entities and entities, transforms and block-state rotation,
-placement maths, the layer view, comparing, item counts that match Resource Tracker's own tests, the build progress
+placement maths, the layer view, comparing, item counts that match BlockCompanion Plugin's own tests, the build progress
 tracker (live changes, unloaded chunks, saving), the progress file (format, name, atomic write, timing), easy place's
 click planning and ghost ray, the material helper, several placements per world and their locks, linked chests
 (through the sync server too), AutoBuild (its layer order, doors and beds as one step, items per block, the chest
@@ -382,7 +382,7 @@ options on the wire), the live link (instance files, the token, projects, status
 | `docs/plan.md` | The milestones and their status |
 | `docs/formats.md` | Which schematic formats are primary and why, and the `.bdproj` layout |
 | `docs/sync-protocol.md` | The server sync protocol |
-| `docs/progress-format.md` | The progress file Resource Tracker reads |
+| `docs/progress-format.md` | The progress file BlockCompanion Plugin reads |
 | `docs/link-protocol.md` | The live link to BlockDesigner |
 
 The `core` sources are compiled into each Minecraft version's `common` module, so every mod jar carries them; the

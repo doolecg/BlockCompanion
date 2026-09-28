@@ -319,7 +319,7 @@ public final class SettingsScreen extends Screen {
                         modifier(c.linkModifier, "+right-click", v -> c.linkModifier = v));
                 l.option("Show boxes", "When the selection and the schematic boxes show: only while the selection tool is in your hand, or always. Ghosts always show.",
                         Ui.cycle(List.of(false, true), c.boxesAlways, v -> v ? "Always" : "Only with tool", v -> c.boxesAlways = v, null));
-                l.option("Count linked chests", "What your linked chests hold counts in the resource list, the info panel and Resource Tracker.",
+                l.option("Count linked chests", "What your linked chests hold counts in the resource list, the info panel and the BlockCompanion Plugin.",
                         Ui.toggle(c.countChests, v -> c.countChests = v, null));
                 l.option("Fetch from chests", "How many easy place asks for at once from your linked chests (BlockCompanion servers).",
                         Ui.cycle(List.of(16, 32, 64, 128, 256, 576), c.restockCount, n -> n == 576 ? "9 stacks" : n + "", v -> c.restockCount = v, null));

@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * The shared progress file that BlockDesigner's Resource Tracker plugin reads (see {@code docs/progress-format.md}):
+ * The shared progress file that BlockDesigner's BlockCompanion Plugin reads (see {@code docs/progress-format.md}):
  * {@code <user home>/.blockcompanion/progress/<name>-<hash12>.json}, written atomically.
  */
 public final class ProgressFile {

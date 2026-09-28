@@ -26,7 +26,7 @@ import java.util.Set;
  * Keeps the {@link ProgressTracker} of the loaded placement fed from the world: every section is scanned once its
  * chunk is loaded, rescanned when the game marks it for re-meshing (chunk loads, bulk changes), and single block
  * changes update their cell at once. Chunk columns that unload keep their last known state. Also saves that state per
- * world (so progress survives leaving) and writes the shared progress file for BlockDesigner's Resource Tracker.
+ * world (so progress survives leaving) and writes the shared progress file for BlockDesigner's BlockCompanion Plugin.
  * Client thread only.
  */
 public final class BuildProgress {

@@ -127,7 +127,7 @@ class GameLinkTest {
         start();
         byte[] data = "fake project".getBytes(StandardCharsets.UTF_8);
         try (App app = new App(link.info().port())) {
-            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "Resource Tracker", "version", "1.2.0"));
+            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "BlockCompanion Plugin", "version", "1.2.0"));
             Map<String, Object> welcome = app.read();
             assertThat(welcome).containsEntry("type", "welcome");
             assertThat(Json.object(welcome.get("instance"))).doesNotContainKey("token");
@@ -145,8 +145,8 @@ class GameLinkTest {
             assertThat(Files.readAllBytes(dir.resolve("schematics/BlockDesigner/Castle_ v2.bdproj"))).isEqualTo(data);
 
             link.tick();
-            assertThat(received).containsExactly("BlockDesigner/Castle_ v2.bdproj|Castle|true|Resource Tracker");
-            assertThat(link.apps()).containsExactly("Resource Tracker");
+            assertThat(received).containsExactly("BlockDesigner/Castle_ v2.bdproj|Castle|true|BlockCompanion Plugin");
+            assertThat(link.apps()).containsExactly("BlockCompanion Plugin");
 
             // Status goes out once something changed; grab reaches the app.
             link.statusChanged();
@@ -186,7 +186,7 @@ class GameLinkTest {
             assertThat(i.port()).isEqualTo(link.port());
         });
         try (App app = new App(link.port())) {
-            app.send(Map.of("type", "hello", "token", token, "app", "Resource Tracker", "version", "1.2.0"));
+            app.send(Map.of("type", "hello", "token", token, "app", "BlockCompanion Plugin", "version", "1.2.0"));
             assertThat(app.read()).containsEntry("type", "welcome");
         }
     }
@@ -196,13 +196,13 @@ class GameLinkTest {
         start();
         byte[] data = "p".getBytes(StandardCharsets.UTF_8);
         try (App app = new App(link.port())) {
-            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "Resource Tracker", "version", "1.2.0"));
+            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "BlockCompanion Plugin", "version", "1.2.0"));
             app.read();
             app.send(Map.of("type", "app-status", "project", "Castle", "live", true));
             app.send(Map.of("type", "ping"));
             assertThat(app.read()).containsEntry("type", "pong");
             assertThat(link.connections()).singleElement().satisfies(a -> {
-                assertThat(a.name()).isEqualTo("Resource Tracker");
+                assertThat(a.name()).isEqualTo("BlockCompanion Plugin");
                 assertThat(a.version()).isEqualTo("1.2.0");
                 assertThat(a.project()).isEqualTo("Castle");
                 assertThat(a.live()).isTrue();
@@ -223,7 +223,7 @@ class GameLinkTest {
             link.tick();
             assertThat(link.lastReceived()).satisfies(r -> {
                 assertThat(r.file()).isEqualTo("BlockDesigner/Castle.bdproj");
-                assertThat(r.app()).isEqualTo("Resource Tracker");
+                assertThat(r.app()).isEqualTo("BlockCompanion Plugin");
                 assertThat(r.open()).isFalse();
             });
         }
@@ -237,7 +237,7 @@ class GameLinkTest {
         Files.write(file, schematic);
         assertThat(link.requestEdit(2, file, "Castle")).isFalse();
         try (App app = new App(link.port())) {
-            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "Resource Tracker", "version", "1.2.0"));
+            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "BlockCompanion Plugin", "version", "1.2.0"));
             app.read();
             link.tick();
             assertThat(app.read()).containsEntry("type", "status");
@@ -268,8 +268,8 @@ class GameLinkTest {
             app.send(Map.of("type", "ping"));
             assertThat(app.read()).containsEntry("type", "pong");
             link.tick();
-            assertThat(received).containsExactly("link 2|BlockDesigner/Castle.bdproj|Castle|Resource Tracker",
-                    "error 2|Could not import Castle.litematic|Resource Tracker", "error -1|Something else|Resource Tracker");
+            assertThat(received).containsExactly("link 2|BlockDesigner/Castle.bdproj|Castle|BlockCompanion Plugin",
+                    "error 2|Could not import Castle.litematic|BlockCompanion Plugin", "error -1|Something else|BlockCompanion Plugin");
             assertThat(link.lastReceived().open()).isTrue();
         }
     }
@@ -294,7 +294,7 @@ class GameLinkTest {
         link.start();
         byte[] data = "p".getBytes(StandardCharsets.UTF_8);
         try (App app = new App(link.port())) {
-            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "Resource Tracker", "version", "1.2.0"));
+            app.send(Map.of("type", "hello", "token", link.info().token(), "app", "BlockCompanion Plugin", "version", "1.2.0"));
             app.read();
             app.send(Map.of("type", "project", "file", "Castle.bdproj", "name", "Castle", "link", 0, "data",
                     Base64.getEncoder().encodeToString(data)));

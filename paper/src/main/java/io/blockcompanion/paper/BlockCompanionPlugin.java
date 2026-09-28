@@ -38,7 +38,7 @@ import java.util.UUID;
  * plugin messaging on {@code blockcompanion:main}, speaking the same protocol as the Fabric and NeoForge mods. Only the
  * Bukkit API is used. Permissions are the nodes {@code blockcompanion.use/upload/place/lock/admin} (see plugin.yml).
  * Linked chests are read and emptied through {@link PaperChestAccess} (and read again when a player closes one), AutoBuild places blocks through
- * {@link PaperBuildWorld} (who may start it: {@code blockcompanion.autobuild}), and the BlockDesigner link lets Resource Tracker
+ * {@link PaperBuildWorld} (who may start it: {@code blockcompanion.autobuild}), and the BlockDesigner link lets BlockCompanion Plugin
  * on the same computer send projects straight into the shared space.
  */
 public final class BlockCompanionPlugin extends JavaPlugin implements PluginMessageListener, Listener {

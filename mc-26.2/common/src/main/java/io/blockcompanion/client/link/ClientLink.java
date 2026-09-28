@@ -26,7 +26,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * The game client's end of the live link to BlockDesigner ({@link GameLink}): an instance file Resource Tracker finds,
+ * The game client's end of the live link to BlockDesigner ({@link GameLink}): an instance file BlockCompanion Plugin finds,
  * projects it sends landing in {@code schematics/BlockDesigner/}, and a status with every loaded placement, its
  * progress and the linked chests. Client thread only.
  */
@@ -84,7 +84,7 @@ public final class ClientLink {
         return link == null ? 0 : link.port();
     }
 
-    /** Apps connected right now (usually "Resource Tracker"). */
+    /** Apps connected right now (usually "BlockCompanion Plugin"). */
     public static List<String> apps() {
         return link == null ? List.of() : link.apps();
     }

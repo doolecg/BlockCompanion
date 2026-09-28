@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Adds up the items blocks cost, using {@link Items}' survival rules. Ported from Resource Tracker's {@code Tally}, with
+ * Adds up the items blocks cost, using {@link Items}' survival rules. Ported from BlockCompanion Plugin's {@code Tally}, with
  * a placement in the world instead of BlockDesigner layers.
  */
 public final class ItemCount {

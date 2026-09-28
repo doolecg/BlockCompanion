@@ -1,3 +1,14 @@
+# BlockCompanion 0.4.1
+
+BlockDesigner's Resource Tracker plugin is now called BlockCompanion Plugin, and the game says so. For Minecraft
+1.21.1, 26.2 and 26.3 on Fabric and NeoForge, and the Paper plugin.
+
+## Changed
+- **BlockCompanion Plugin:** the link panel, the settings, tooltips and the messages on the action bar name
+  BlockDesigner's BlockCompanion Plugin (formerly Resource Tracker). Linking works as before.
+
+---
+
 # BlockCompanion 0.4.0
 
 AutoBuild gets options like Create's Schematicannon: speed, order, what it may replace, a radius around you and one

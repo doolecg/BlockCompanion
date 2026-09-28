@@ -16,7 +16,7 @@ import java.util.TreeMap;
 
 /**
  * The chests (and other containers) a player linked with the selection tool, and what was last seen in each. Their
- * contents count as materials in the resource list and go to Resource Tracker. Contents come from the server when it
+ * contents count as materials in the resource list and go to BlockCompanion Plugin. Contents come from the server when it
  * runs BlockCompanion, from the integrated server in singleplayer, or else from the last time the player opened the
  * chest. A double chest is linked by one position (the game layer picks the same half every time).
  */
