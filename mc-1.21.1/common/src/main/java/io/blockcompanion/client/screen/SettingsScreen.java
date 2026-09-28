@@ -63,7 +63,7 @@ public final class SettingsScreen extends Screen {
     private final Screen lastScreen;
     private Tab tab;
     private OptionList list;
-    private Button resetButton;
+    private Button resetButton, guideButton;
     private boolean resetArmed;
     /** The key waiting for a new binding, or null. */
     private KeyMapping selectedKey;
@@ -137,6 +137,8 @@ public final class SettingsScreen extends Screen {
         resetButton = addRenderableWidget(Ui.button("Reset " + tab.label, "Puts everything in this section back to its default.",
                 width - Ui.PAD - 2 * bw - Ui.GAP, by, bw, b -> reset()));
         addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds(width - Ui.PAD - bw, by, bw, 20).build());
+        guideButton = addRenderableWidget(Ui.button("Guide", "A short walk through BlockCompanion, a page at a time.",
+                Ui.PAD, by, Math.min(60, bw), b -> open(new GuideScreen(this))));
         resetArmed = false;
     }
 
@@ -155,7 +157,8 @@ public final class SettingsScreen extends Screen {
             Ui.underline(g, sideX, Ui.TITLE_H + Ui.PAD + i * 22 + 19, sideW);
         }
         String note = "Changes apply at once and are saved.";
-        if (Ui.PAD + font.width(note) + Ui.PAD < resetButton.getX()) Ui.text(g, font, note, Ui.PAD, height - FOOTER_H + 11, Ui.DIM);
+        int noteX = guideButton.getRight() + Ui.PAD;
+        if (noteX + font.width(note) + Ui.PAD < resetButton.getX()) Ui.text(g, font, note, noteX, height - FOOTER_H + 11, Ui.DIM);
     }
 
     @Override

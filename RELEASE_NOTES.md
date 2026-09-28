@@ -1,3 +1,21 @@
+# BlockCompanion 0.4.2
+
+A short guide walks new players through the mod, and many wrong or in-the-way blocks no longer drag the frame rate
+down. For Minecraft 1.21.1, 26.2 and 26.3 on Fabric and NeoForge, and the Paper plugin.
+
+## New
+- **Guide:** a few pages on loading a schematic, moving it into place, reading the ghosts, building, materials and
+  AutoBuild, and saving. It opens by itself the first time you are in a world, and the settings screen's **Guide**
+  button opens it again. Key names in it are the ones you have bound.
+- **Welcome line:** joining a world says in chat which key opens the BlockCompanion menu.
+
+## Fixed
+- **Warning outlines:** red (wrong) and orange (in the way) blocks that touch now share one outline and one tint around
+  the whole group, instead of a box around every block. A schematic loaded into a hillside or over an old build stays
+  smooth, and the tint no longer shows darker seams between blocks.
+
+---
+
 # BlockCompanion 0.4.1
 
 BlockDesigner's Resource Tracker plugin is now called BlockCompanion Plugin, and the game says so. For Minecraft

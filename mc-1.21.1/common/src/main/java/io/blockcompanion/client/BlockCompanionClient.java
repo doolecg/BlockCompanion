@@ -9,6 +9,7 @@ import io.blockcompanion.client.progress.BuildProgress;
 import io.blockcompanion.client.render.GhostRenderer;
 import io.blockcompanion.client.render.BoxRenderer;
 import io.blockcompanion.client.render.SelectionRenderer;
+import io.blockcompanion.client.screen.GuideScreen;
 import io.blockcompanion.client.screen.LibraryScreen;
 import io.blockcompanion.client.screen.ResourceScreen;
 import io.blockcompanion.client.screen.SaveScreen;
@@ -101,6 +102,8 @@ public final class BlockCompanionClient {
     private static String worldKey;
     private static SavedPlacements saved;
     private static int ticksSinceChange;
+    /** Ticks into a newly joined world, until the welcome line (and the first-time guide) is due; -1 when done. */
+    private static int welcomeTicks = -1;
     private static double scrollRemainder;
     /** The placement the player changed last: what undo and redo act on. */
     /** Undo and redo across every placement and the selection's moves, in the order the changes were made. */
@@ -292,6 +295,7 @@ public final class BlockCompanionClient {
         Updates.tick(mc);
         if (mc.level == null || mc.player == null) return;
 
+        welcome(mc);
         while (Keys.LIBRARY.consumeClick()) mc.setScreen(new LibraryScreen(mc.screen));
         while (Keys.RESOURCES.consumeClick()) {
             if (PLACEMENTS.isEmpty()) actionBar("No schematic loaded");
@@ -682,6 +686,7 @@ public final class BlockCompanionClient {
         saved = new SavedPlacements(placementsDir, key);
         ChestTracker.get().open(saved.folder().resolve("chests.json"));
         restore();
+        welcomeTicks = 0;
     }
 
     private static String worldKey(Minecraft mc) {
@@ -1108,7 +1113,7 @@ public final class BlockCompanionClient {
     }
 
     /** The tool item's name, for messages. */
-    private static String toolName() {
+    public static String toolName() {
         try {
             var item = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse(config.toolItem));
             return new net.minecraft.world.item.ItemStack(item).getHoverName().getString().toLowerCase(java.util.Locale.ROOT);
@@ -1384,6 +1389,17 @@ public final class BlockCompanionClient {
             }
         }
         OVERLAP_WARNED.retainAll(now);
+    }
+
+    /** A few seconds into a world: a line in chat naming the menu's key, and the guide the first time ever. */
+    private static void welcome(Minecraft mc) {
+        if (welcomeTicks < 0 || ++welcomeTicks < 60 || mc.screen != null) return;
+        welcomeTicks = -1;
+        chat("Press " + keyName("library") + " to open the BlockCompanion menu. Its settings have a guide to the mod.");
+        if (config.guideSeen || PLACE_SELF_TEST || ChestSelfTest.ENABLED || UiSelfTest.ENABLED) return;
+        config.guideSeen = true;
+        configChanged();
+        mc.setScreen(new GuideScreen(null));
     }
 
     /** A line in chat, marked as BlockCompanion's. */

@@ -163,6 +163,8 @@ public final class ClientConfig {
     public boolean updateAutoDownload = false;
     /** The settings screen tab last open. */
     public String settingsTab = "";
+    /** The guide has opened once (it opens by itself the first time you are in a world). */
+    public boolean guideSeen = false;
 
     /** AutoBuild's options as set here (without the held block, which is looked up when it starts). */
     public io.blockcompanion.core.autobuild.AutoBuildOptions autoBuildDefaults() {
@@ -242,6 +244,7 @@ public final class ClientConfig {
         c.updateCheck = bool(p, "updates.check", true);
         c.updateAutoDownload = bool(p, "updates.autoDownload", false);
         c.settingsTab = p.getProperty("settings.tab", "").trim();
+        c.guideSeen = bool(p, "guide.seen", false);
         c.save(file);
         return c;
     }
@@ -311,6 +314,7 @@ public final class ClientConfig {
         p.setProperty("updates.check", Boolean.toString(updateCheck));
         p.setProperty("updates.autoDownload", Boolean.toString(updateAutoDownload));
         p.setProperty("settings.tab", settingsTab);
+        p.setProperty("guide.seen", Boolean.toString(guideSeen));
         try {
             Files.createDirectories(file.getParent());
             try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {

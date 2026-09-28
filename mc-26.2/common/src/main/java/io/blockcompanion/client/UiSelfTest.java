@@ -1,5 +1,6 @@
 package io.blockcompanion.client;
 
+import io.blockcompanion.client.screen.GuideScreen;
 import io.blockcompanion.client.screen.LibraryScreen;
 import io.blockcompanion.client.screen.SettingsScreen;
 import net.minecraft.client.Minecraft;
@@ -10,7 +11,7 @@ import java.util.function.Supplier;
 
 /**
  * Development check of the screens' look: with {@code BLOCKCOMPANION_UI_SELFTEST=1}, once in a world it loads a
- * schematic if none is, then opens every step of the schematic screen and every settings section in turn and saves a
+ * schematic if none is, then opens every step of the schematic screen, every settings section and every guide page in turn and saves a
  * screenshot of each ({@code screenshots/bc-ui-*.png}). {@code BLOCKCOMPANION_SELFTEST_QUIT=1} closes the game after.
  */
 public final class UiSelfTest {
@@ -20,7 +21,7 @@ public final class UiSelfTest {
     private record Shot(String name, Supplier<Screen> screen) {
     }
 
-    private static final List<Shot> SHOTS = List.of(
+    private static final List<Shot> SHOTS = java.util.stream.Stream.concat(java.util.stream.Stream.of(
             new Shot("library-1-source", () -> new LibraryScreen(null, LibraryScreen.Step.SOURCE, false)),
             new Shot("library-1-server", () -> new LibraryScreen(null, LibraryScreen.Step.SOURCE, true)),
             new Shot("library-2-placement", () -> new LibraryScreen(null, LibraryScreen.Step.PLACEMENT, false)),
@@ -31,7 +32,8 @@ public final class UiSelfTest {
             new Shot("settings-colours", () -> new SettingsScreen(null, SettingsScreen.Tab.COLORS)),
             new Shot("settings-keys", () -> new SettingsScreen(null, SettingsScreen.Tab.KEYS)),
             new Shot("settings-blockdesigner", () -> new SettingsScreen(null, SettingsScreen.Tab.LINK)),
-            new Shot("settings-updates", () -> new SettingsScreen(null, SettingsScreen.Tab.UPDATES)));
+            new Shot("settings-updates", () -> new SettingsScreen(null, SettingsScreen.Tab.UPDATES))),
+            java.util.stream.IntStream.range(0, GuideScreen.pages()).mapToObj(i -> new Shot("guide-" + (i + 1), () -> new GuideScreen(null, i)))).toList();
 
     private static int ticks, index = -1;
 

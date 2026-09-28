@@ -16,6 +16,7 @@ import io.blockcompanion.client.BlockCompanionClient;
 import io.blockcompanion.client.ClientConfig;
 import io.blockcompanion.client.StateMapper;
 import io.blockcompanion.core.compare.Compare;
+import io.blockcompanion.core.compare.MarkMesh;
 import io.blockcompanion.core.hud.Palette;
 import io.blockcompanion.core.model.Box;
 import io.blockcompanion.core.nbt.Snbt;
@@ -89,6 +90,8 @@ public final class GhostRenderer {
     /** Block entity ghosts get a faint outline so they read as not built even when drawn opaque. */
     private static final int BE_LINE_ALPHA = 0x80;
     private static final float INFLATE = 0.004f;
+    /** Mark kinds in the {@link MarkMesh}: touching marks of one kind are merged into one shape. */
+    private static final int MARK_WRONG = 1, MARK_EXTRA = 2;
 
     /** Block entities whose renderers draw the block itself (or the part that matters), safe to draw for a ghost. */
     private static final Set<BlockEntityType<?>> BE_TYPES = Set.of(BlockEntityType.CHEST, BlockEntityType.TRAPPED_CHEST,
@@ -159,11 +162,16 @@ public final class GhostRenderer {
         if (sections.contains(k)) defer(k, WORLD_GAP_MS);
     }
 
-    /** A block inside the placement changed: its section is meshed again shortly. */
+    /** A block inside the placement changed: its section is meshed again shortly, and the neighbours its marks join. */
     public void onCellChanged(int x, int y, int z) {
         if (placement == null) return;
-        long k = key(x >> 4, y >> 4, z >> 4);
-        if (sections.contains(k)) defer(k, CELL_GAP_MS);
+        int sx = x >> 4, sy = y >> 4, sz = z >> 4;
+        for (int dx = (x & 15) == 0 ? -1 : 0; dx <= ((x & 15) == 15 ? 1 : 0); dx++)
+            for (int dy = (y & 15) == 0 ? -1 : 0; dy <= ((y & 15) == 15 ? 1 : 0); dy++)
+                for (int dz = (z & 15) == 0 ? -1 : 0; dz <= ((z & 15) == 15 ? 1 : 0); dz++) {
+                    long k = key(sx + dx, sy + dy, sz + dz);
+                    if (sections.contains(k)) defer(k, CELL_GAP_MS);
+                }
     }
 
     private void defer(long k, long gapMs) {
@@ -508,6 +516,7 @@ public final class GhostRenderer {
         PoseStack pose = new PoseStack();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         List<BeGhost> bes = new ArrayList<>();
+        MarkMesh marks = new MarkMesh();
 
         for (int y = y0; y <= y1; y++) {
             if (!layers.isVisible(y - box.minY())) continue;
@@ -548,20 +557,15 @@ public final class GhostRenderer {
                             }
                             if (!drawn) cube(overlays, lx, ly, lz, NO_MODEL_FILL);
                         }
-                        case WRONG -> {
-                            cube(overlays, lx, ly, lz, color(Palette.Entry.WRONG, MARK_FILL_ALPHA));
-                            edges(lines, lx - INFLATE, ly - INFLATE, lz - INFLATE, 1 + 2 * INFLATE, 1 + 2 * INFLATE, 1 + 2 * INFLATE, color(Palette.Entry.WRONG, MARK_LINE_ALPHA));
-                        }
-                        case EXTRA -> {
-                            cube(overlays, lx, ly, lz, color(Palette.Entry.EXTRA, MARK_FILL_ALPHA));
-                            edges(lines, lx - INFLATE, ly - INFLATE, lz - INFLATE, 1 + 2 * INFLATE, 1 + 2 * INFLATE, 1 + 2 * INFLATE, color(Palette.Entry.EXTRA, MARK_LINE_ALPHA));
-                        }
+                        case WRONG -> marks.set(x - ox, y - oy, z - oz, MARK_WRONG);
+                        case EXTRA -> marks.set(x - ox, y - oy, z - oz, MARK_EXTRA);
                         default -> {
                         }
                     }
                 }
             }
         }
+        if (!marks.isEmpty()) mergeMarks(level, layers, marks, ox, oy, oz, overlays, lines);
 
         SectionMesh mesh = meshes.computeIfAbsent(key, k -> new SectionMesh());
         MeshData ghostData = ghosts.build();
@@ -578,6 +582,49 @@ public final class GhostRenderer {
         mesh.lines = upload(mesh.lines, lines.build());
         mesh.blockEntities = bes.isEmpty() ? List.of() : bes;
         if (mesh.ghosts == null && mesh.overlays == null && mesh.lines == null && bes.isEmpty()) meshes.remove(key);
+    }
+
+    /**
+     * Joins the section's wrong and in-the-way marks into one shell and outline per touching group, reading the marks
+     * in the cells just outside the section so groups join across its borders.
+     */
+    private void mergeMarks(Level level, Layers layers, MarkMesh marks, int ox, int oy, int oz, VertexConsumer overlays, VertexConsumer lines) {
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        int n = MarkMesh.SIZE;
+        for (int ly = -1; ly <= n; ly++)
+            for (int lz = -1; lz <= n; lz++)
+                for (int lx = -1; lx <= n; lx++)
+                    if (lx < 0 || lx == n || ly < 0 || ly == n || lz < 0 || lz == n)
+                        marks.set(lx, ly, lz, markAt(level, layers, ox + lx, oy + ly, oz + lz, pos));
+        int wrongFill = color(Palette.Entry.WRONG, MARK_FILL_ALPHA), wrongLine = color(Palette.Entry.WRONG, MARK_LINE_ALPHA);
+        int extraFill = color(Palette.Entry.EXTRA, MARK_FILL_ALPHA), extraLine = color(Palette.Entry.EXTRA, MARK_LINE_ALPHA);
+        // Grid line 16 of an axis is the next section's, unless the placement ends before it.
+        marks.emit(INFLATE, ox + n > box.maxX(), oy + n > box.maxY(), oz + n > box.maxZ(), new MarkMesh.Sink() {
+            @Override
+            public void quad(int kind, float[] c) {
+                int argb = kind == MARK_WRONG ? wrongFill : extraFill;
+                for (int i = 0; i < 12; i += 3) overlays.addVertex(c[i], c[i + 1], c[i + 2]).setColor(argb);
+            }
+
+            @Override
+            public void line(int kind, float ax, float ay, float az, float bx, float by, float bz) {
+                int argb = kind == MARK_WRONG ? wrongLine : extraLine;
+                lines.addVertex(ax, ay, az).setColor(argb);
+                lines.addVertex(bx, by, bz).setColor(argb);
+            }
+        });
+    }
+
+    /** The mark a cell shows: wrong, in the way, or none (outside the placement or its shown layers). */
+    private int markAt(Level level, Layers layers, int x, int y, int z, BlockPos.MutableBlockPos pos) {
+        if (x < box.minX() || x > box.maxX() || y < box.minY() || y > box.maxY() || z < box.minZ() || z > box.maxZ()) return 0;
+        if (!layers.isVisible(y - box.minY())) return 0;
+        pos.set(x, y, z);
+        return switch (Compare.classify(placement.stateAt(x, y, z), StateMapper.toCore(level.getBlockState(pos)))) {
+            case WRONG -> MARK_WRONG;
+            case EXTRA -> MARK_EXTRA;
+            default -> 0;
+        };
     }
 
     /**

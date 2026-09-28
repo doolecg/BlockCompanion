@@ -6,6 +6,7 @@ import io.blockcompanion.client.BlockCompanionClient;
 import io.blockcompanion.client.ClientConfig;
 import io.blockcompanion.client.StateMapper;
 import io.blockcompanion.core.compare.Compare;
+import io.blockcompanion.core.compare.MarkMesh;
 import io.blockcompanion.core.hud.Palette;
 import io.blockcompanion.core.model.Box;
 import io.blockcompanion.core.placement.Layers;
@@ -80,8 +81,10 @@ public final class GhostRenderer {
     /** Special-model and block entity ghosts get a faint outline: they are drawn opaque. */
     private static final int BE_LINE_ALPHA = 0x80;
     private static final float INFLATE = 0.004f;
-    /** Floats per overlay cube: 24 vertices of x, y, z. */
-    private static final int CUBE_FLOATS = 72;
+    /** Floats per overlay quad: 4 vertices of x, y, z. */
+    private static final int QUAD_FLOATS = 12;
+    /** Mark kinds in the {@link MarkMesh}: touching marks of one kind are merged into one shape. */
+    private static final int MARK_WRONG = 1, MARK_EXTRA = 2;
     private static final BlockDisplayContext DISPLAY = BlockDisplayContext.create();
 
     /** Block entities whose renderers draw what matters of a ghost (the rest have special block models). */
@@ -97,7 +100,7 @@ public final class GhostRenderer {
     }
 
     /** A section's recorded geometry: model ghosts, coloured boxes, outlines, and the ghosts drawn some other way. */
-    private record SectionMesh(QuadRecorder.Recorded ghosts, float[] cubes, int[] cubeColors, float[] lines, int[] lineColors,
+    private record SectionMesh(QuadRecorder.Recorded ghosts, float[] quads, int[] quadColors, float[] lines, int[] lineColors,
                                List<SpecialGhost> specials, List<BeGhost> blockEntities) {
     }
 
@@ -137,11 +140,16 @@ public final class GhostRenderer {
         if (sections.contains(k)) defer(k, WORLD_GAP_MS);
     }
 
-    /** A block inside the placement changed: its section is meshed again shortly. */
+    /** A block inside the placement changed: its section is meshed again shortly, and the neighbours its marks join. */
     public void onCellChanged(int x, int y, int z) {
         if (placement == null) return;
-        long k = key(x >> 4, y >> 4, z >> 4);
-        if (sections.contains(k)) defer(k, CELL_GAP_MS);
+        int sx = x >> 4, sy = y >> 4, sz = z >> 4;
+        for (int dx = (x & 15) == 0 ? -1 : 0; dx <= ((x & 15) == 15 ? 1 : 0); dx++)
+            for (int dy = (y & 15) == 0 ? -1 : 0; dy <= ((y & 15) == 15 ? 1 : 0); dy++)
+                for (int dz = (z & 15) == 0 ? -1 : 0; dz <= ((z & 15) == 15 ? 1 : 0); dz++) {
+                    long k = key(sx + dx, sy + dy, sz + dz);
+                    if (sections.contains(k)) defer(k, CELL_GAP_MS);
+                }
     }
 
     private void defer(long k, long gapMs) {
@@ -252,13 +260,13 @@ public final class GhostRenderer {
                 QuadRecorder.Recorded g = mesh.ghosts();
                 collector.submitCustomGeometry(poseStack, ghostType, (pose, out) -> g.replay(pose, out, pulse, alphaPulse, false));
             }
-            if (mesh.cubes() != null) {
-                float[] o = mesh.cubes();
-                int[] colors = mesh.cubeColors();
+            if (mesh.quads() != null) {
+                float[] o = mesh.quads();
+                int[] colors = mesh.quadColors();
                 collector.submitCustomGeometry(poseStack, overlayType, (pose, out) -> {
-                    for (int cube = 0; cube < colors.length; cube++) {
-                        int col = colors[cube];
-                        for (int i = cube * CUBE_FLOATS, end = i + CUBE_FLOATS; i < end; i += 3) out.addVertex(pose, o[i], o[i + 1], o[i + 2]).setColor(col);
+                    for (int quad = 0; quad < colors.length; quad++) {
+                        int col = colors[quad];
+                        for (int i = quad * QUAD_FLOATS, end = i + QUAD_FLOATS; i < end; i += 3) out.addVertex(pose, o[i], o[i + 1], o[i + 2]).setColor(col);
                     }
                 });
             }
@@ -436,20 +444,46 @@ public final class GhostRenderer {
 
     /** Growable float and colour buffers for boxes and outlines. */
     private static final class Shapes {
-        float[] cubes = new float[CUBE_FLOATS * 16];
-        int[] cubeColors = new int[16];
-        int cubeCount;
+        float[] quads = new float[QUAD_FLOATS * 96];
+        int[] quadColors = new int[96];
+        int quadCount;
         float[] lines = new float[6 * 48];
         int[] lineColors = new int[48];
         int lineCount;
 
+        /** A slightly inflated cube: 6 quads. */
         void cube(float x, float y, float z, int color) {
-            if (cubeCount == cubeColors.length) {
-                cubeColors = Arrays.copyOf(cubeColors, cubeColors.length * 2);
-                cubes = Arrays.copyOf(cubes, cubes.length * 2);
+            float a = x - INFLATE, b = y - INFLATE, c = z - INFLATE;
+            float d = x + 1 + INFLATE, e = y + 1 + INFLATE, f = z + 1 + INFLATE;
+            float[][] faces = {
+                    {a, b, c, d, b, c, d, b, f, a, b, f}, {a, e, c, a, e, f, d, e, f, d, e, c},
+                    {a, b, c, a, e, c, d, e, c, d, b, c}, {a, b, f, d, b, f, d, e, f, a, e, f},
+                    {a, b, c, a, b, f, a, e, f, a, e, c}, {d, b, c, d, e, c, d, e, f, d, b, f}};
+            for (float[] q : faces) quad(q, color);
+        }
+
+        void quad(float[] corners, int color) {
+            if (quadCount == quadColors.length) {
+                quadColors = Arrays.copyOf(quadColors, quadColors.length * 2);
+                quads = Arrays.copyOf(quads, quads.length * 2);
             }
-            GhostRenderer.cube(cubes, cubeCount * CUBE_FLOATS, x, y, z);
-            cubeColors[cubeCount++] = color;
+            System.arraycopy(corners, 0, quads, quadCount * QUAD_FLOATS, QUAD_FLOATS);
+            quadColors[quadCount++] = color;
+        }
+
+        void line(float ax, float ay, float az, float bx, float by, float bz, int color) {
+            if (lineCount == lineColors.length) {
+                lineColors = Arrays.copyOf(lineColors, lineColors.length * 2);
+                lines = Arrays.copyOf(lines, lines.length * 2);
+            }
+            int o = lineCount * 6;
+            lines[o] = ax;
+            lines[o + 1] = ay;
+            lines[o + 2] = az;
+            lines[o + 3] = bx;
+            lines[o + 4] = by;
+            lines[o + 5] = bz;
+            lineColors[lineCount++] = color;
         }
 
         void outline(float x, float y, float z, int color) {
@@ -457,20 +491,7 @@ public final class GhostRenderer {
             float x1 = a + s, y1 = b + s, z1 = c + s;
             float[][] p = {{a, b, c}, {x1, b, c}, {x1, b, z1}, {a, b, z1}, {a, y1, c}, {x1, y1, c}, {x1, y1, z1}, {a, y1, z1}};
             int[][] edges = {{0, 1}, {1, 2}, {2, 3}, {3, 0}, {4, 5}, {5, 6}, {6, 7}, {7, 4}, {0, 4}, {1, 5}, {2, 6}, {3, 7}};
-            for (int[] e : edges) {
-                if (lineCount == lineColors.length) {
-                    lineColors = Arrays.copyOf(lineColors, lineColors.length * 2);
-                    lines = Arrays.copyOf(lines, lines.length * 2);
-                }
-                int o = lineCount * 6;
-                lines[o] = p[e[0]][0];
-                lines[o + 1] = p[e[0]][1];
-                lines[o + 2] = p[e[0]][2];
-                lines[o + 3] = p[e[1]][0];
-                lines[o + 4] = p[e[1]][1];
-                lines[o + 5] = p[e[1]][2];
-                lineColors[lineCount++] = color;
-            }
+            for (int[] e : edges) line(p[e[0]][0], p[e[0]][1], p[e[0]][2], p[e[1]][0], p[e[1]][1], p[e[1]][2], color);
         }
     }
 
@@ -492,6 +513,7 @@ public final class GhostRenderer {
         Shapes shapes = new Shapes();
         List<SpecialGhost> specials = new ArrayList<>();
         List<BeGhost> bes = new ArrayList<>();
+        MarkMesh marks = new MarkMesh();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
         for (int y = y0; y <= y1; y++) {
@@ -540,28 +562,23 @@ public final class GhostRenderer {
                             }
                             if (!drawn) shapes.cube(lx, ly, lz, NO_MODEL_FILL);
                         }
-                        case WRONG -> {
-                            shapes.cube(lx, ly, lz, color(Palette.Entry.WRONG, MARK_FILL_ALPHA));
-                            shapes.outline(lx, ly, lz, color(Palette.Entry.WRONG, MARK_LINE_ALPHA));
-                        }
-                        case EXTRA -> {
-                            shapes.cube(lx, ly, lz, color(Palette.Entry.EXTRA, MARK_FILL_ALPHA));
-                            shapes.outline(lx, ly, lz, color(Palette.Entry.EXTRA, MARK_LINE_ALPHA));
-                        }
+                        case WRONG -> marks.set(x - ox, y - oy, z - oz, MARK_WRONG);
+                        case EXTRA -> marks.set(x - ox, y - oy, z - oz, MARK_EXTRA);
                         default -> {
                         }
                     }
                 }
             }
         }
+        if (!marks.isEmpty()) mergeMarks(level, layers, marks, ox, oy, oz, shapes);
         QuadRecorder.Recorded g = ghosts.finish();
-        if (g == null && shapes.cubeCount == 0 && shapes.lineCount == 0 && specials.isEmpty() && bes.isEmpty()) {
+        if (g == null && shapes.quadCount == 0 && shapes.lineCount == 0 && specials.isEmpty() && bes.isEmpty()) {
             meshes.remove(key);
             return;
         }
         meshes.put(key, new SectionMesh(g,
-                shapes.cubeCount == 0 ? null : Arrays.copyOf(shapes.cubes, shapes.cubeCount * CUBE_FLOATS),
-                shapes.cubeCount == 0 ? null : Arrays.copyOf(shapes.cubeColors, shapes.cubeCount),
+                shapes.quadCount == 0 ? null : Arrays.copyOf(shapes.quads, shapes.quadCount * QUAD_FLOATS),
+                shapes.quadCount == 0 ? null : Arrays.copyOf(shapes.quadColors, shapes.quadCount),
                 shapes.lineCount == 0 ? null : Arrays.copyOf(shapes.lines, shapes.lineCount * 6),
                 shapes.lineCount == 0 ? null : Arrays.copyOf(shapes.lineColors, shapes.lineCount),
                 specials.isEmpty() ? List.of() : specials, bes.isEmpty() ? List.of() : bes));
@@ -581,15 +598,43 @@ public final class GhostRenderer {
         return be;
     }
 
-    /** A slightly inflated cube: 6 quads, 24 vertices of (x, y, z) written at {@code at}. */
-    private static void cube(float[] out, int at, float x, float y, float z) {
-        float a = x - INFLATE, b = y - INFLATE, c = z - INFLATE;
-        float d = x + 1 + INFLATE, e = y + 1 + INFLATE, f = z + 1 + INFLATE;
-        float[][] quads = {
-                {a, b, c, d, b, c, d, b, f, a, b, f}, {a, e, c, a, e, f, d, e, f, d, e, c},
-                {a, b, c, a, e, c, d, e, c, d, b, c}, {a, b, f, d, b, f, d, e, f, a, e, f},
-                {a, b, c, a, b, f, a, e, f, a, e, c}, {d, b, c, d, e, c, d, e, f, d, b, f}};
-        int i = at;
-        for (float[] q : quads) for (float v : q) out[i++] = v;
+    /**
+     * Joins the section's wrong and in-the-way marks into one shell and outline per touching group, reading the marks
+     * in the cells just outside the section so groups join across its borders.
+     */
+    private void mergeMarks(ClientLevel level, Layers layers, MarkMesh marks, int ox, int oy, int oz, Shapes shapes) {
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        int n = MarkMesh.SIZE;
+        for (int ly = -1; ly <= n; ly++)
+            for (int lz = -1; lz <= n; lz++)
+                for (int lx = -1; lx <= n; lx++)
+                    if (lx < 0 || lx == n || ly < 0 || ly == n || lz < 0 || lz == n)
+                        marks.set(lx, ly, lz, markAt(level, layers, ox + lx, oy + ly, oz + lz, pos));
+        int wrongFill = color(Palette.Entry.WRONG, MARK_FILL_ALPHA), wrongLine = color(Palette.Entry.WRONG, MARK_LINE_ALPHA);
+        int extraFill = color(Palette.Entry.EXTRA, MARK_FILL_ALPHA), extraLine = color(Palette.Entry.EXTRA, MARK_LINE_ALPHA);
+        // Grid line 16 of an axis is the next section's, unless the placement ends before it.
+        marks.emit(INFLATE, ox + n > box.maxX(), oy + n > box.maxY(), oz + n > box.maxZ(), new MarkMesh.Sink() {
+            @Override
+            public void quad(int kind, float[] corners) {
+                shapes.quad(corners, kind == MARK_WRONG ? wrongFill : extraFill);
+            }
+
+            @Override
+            public void line(int kind, float ax, float ay, float az, float bx, float by, float bz) {
+                shapes.line(ax, ay, az, bx, by, bz, kind == MARK_WRONG ? wrongLine : extraLine);
+            }
+        });
+    }
+
+    /** The mark a cell shows: wrong, in the way, or none (outside the placement or its shown layers). */
+    private int markAt(ClientLevel level, Layers layers, int x, int y, int z, BlockPos.MutableBlockPos pos) {
+        if (x < box.minX() || x > box.maxX() || y < box.minY() || y > box.maxY() || z < box.minZ() || z > box.maxZ()) return 0;
+        if (!layers.isVisible(y - box.minY())) return 0;
+        pos.set(x, y, z);
+        return switch (Compare.classify(placement.stateAt(x, y, z), StateMapper.toCore(level.getBlockState(pos)))) {
+            case WRONG -> MARK_WRONG;
+            case EXTRA -> MARK_EXTRA;
+            default -> 0;
+        };
     }
 }
