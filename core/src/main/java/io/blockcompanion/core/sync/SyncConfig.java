@@ -165,7 +165,7 @@ public final class SyncConfig {
             toProperties().store(w, """
                      BlockCompanion shared space (server sync).
                      Sizes are in KiB. permission.* (everyone, op or nobody) applies to Fabric/NeoForge servers;
-                     on Paper/Spigot/Bukkit use the permission nodes blockcompanion.use/upload/place/lock/admin instead.
+                     on Paper use the permission nodes blockcompanion.use/upload/place/lock/admin instead.
                      allowAutoPlace, autoPlace*, allowCreativeFill, allowChestBuild, allowEasyPlace and
                      allowEasyPlaceAuto are announced to clients for the building helpers.
                      allowAutoBuild switches AutoBuild (the server builds a placement from linked chests) on or off;

@@ -27,7 +27,7 @@ BlockDesigner opens. With BlockDesigner's BlockCompanion Plugin it links live: s
 into the game, see the game follow your edits, and see in the app what is built and what your chests hold.
 
 It is a client mod for **Fabric** and **NeoForge** on **Minecraft 1.21.1, 26.2 and 26.3**, plus a
-**Paper/Spigot/Bukkit** plugin for servers without mods. It is in early development; the [plan](docs/plan.md) lists
+**Paper** plugin (Paper 1.21.1) for servers without mods. It is in early development; the [plan](docs/plan.md) lists
 what comes next.
 
 **Contents:** [Download](#download-and-install) · [Features](#features) · [Building from source](#building-from-source) · [Project layout](#project-layout)
@@ -45,7 +45,7 @@ release has one jar per loader and Minecraft version:
 | `blockcompanion-neoforge-26.2-<version>.jar` | NeoForge, Minecraft 26.2 |
 | `blockcompanion-fabric-26.3-<version>.jar` | Fabric, Minecraft 26.3 (needs Fabric API) |
 | `blockcompanion-neoforge-26.3-<version>.jar` | NeoForge, Minecraft 26.3 |
-| `blockcompanion-paper-<version>.jar` | Paper, Spigot or Bukkit servers (goes in `plugins`) |
+| `blockcompanion-paper-<version>.jar` | Paper 1.21.1 servers (goes in `plugins`) |
 
 1. Download the jar for your loader and Minecraft version.
    Or let BlockDesigner do it: BlockCompanion Plugin's **Install mod…** puts the right jar into a game's `mods` folder.
@@ -345,7 +345,7 @@ The jars end up in:
 | `mc-26.2/neoforge/build/libs/blockcompanion-neoforge-26.2-<version>.jar` | NeoForge, Minecraft 26.2 |
 | `mc-26.3/fabric/build/libs/blockcompanion-fabric-26.3-<version>.jar` | Fabric, Minecraft 26.3 |
 | `mc-26.3/neoforge/build/libs/blockcompanion-neoforge-26.3-<version>.jar` | NeoForge, Minecraft 26.3 |
-| `paper/build/libs/blockcompanion-paper-<version>.jar` | Paper/Spigot/Bukkit plugin |
+| `paper/build/libs/blockcompanion-paper-<version>.jar` | Paper plugin |
 
 To try it in a development game: `./gradlew :mc-1.21.1:fabric:runClient` (or `:mc-1.21.1:neoforge:runClient`,
 `:mc-26.2:fabric:runClient`, `:mc-26.2:neoforge:runClient`, `:mc-26.3:fabric:runClient`, `:mc-26.3:neoforge:runClient`). `./gradlew :paper:runServer` starts a Paper 1.21.1
@@ -378,7 +378,7 @@ options on the wire), the live link (instance files, the token, projects, status
 | `mc-1.21.1/fabric`, `mc-1.21.1/neoforge` | 1.21.1 entry points and mod metadata |
 | `mc-26.2/common`, `mc-26.2/fabric`, `mc-26.2/neoforge` | The same for Minecraft 26.2 |
 | `mc-26.3/common`, `mc-26.3/fabric`, `mc-26.3/neoforge` | The same for Minecraft 26.3 |
-| `paper/` | The Bukkit-API server plugin |
+| `paper/` | The Paper server plugin (Bukkit API only) |
 | `docs/plan.md` | The milestones and their status |
 | `docs/formats.md` | Which schematic formats are primary and why, and the `.bdproj` layout |
 | `docs/sync-protocol.md` | The server sync protocol |

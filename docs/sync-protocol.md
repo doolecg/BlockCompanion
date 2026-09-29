@@ -1,7 +1,7 @@
 # BlockCompanion sync protocol
 
 This is how the client mod talks to a server that runs BlockCompanion: the Fabric or NeoForge mod on a dedicated
-server (or an integrated server opened to LAN), or the Paper/Spigot/Bukkit plugin. Every side runs the same code,
+server (or an integrated server opened to LAN), or the Paper plugin. Every side runs the same code,
 `io.blockcompanion.core.sync` in `core`, which is plain Java 21 with no Minecraft classes.
 
 ## Transport
@@ -301,7 +301,7 @@ and with the options the player picked (`AutoBuildOptions`). It runs in `SyncSer
 | ADMIN | `blockcompanion.admin` | op | bypass locks, delete anything, no per-player quota |
 | AUTOBUILD | `blockcompanion.autobuild` (default op) | everyone in singleplayer and on LAN, op on a dedicated server | start AutoBuild |
 
-- **Paper, Spigot, Bukkit:** permissions use Bukkit permission nodes. `plugin.yml` sets the defaults, and `admin` grants
+- **Paper:** permissions use Bukkit permission nodes. `plugin.yml` sets the defaults, and `admin` grants
   the others as children.
 - **Fabric, NeoForge:** permissions come from `permission.<name>` in the config, set to `everyone`, `op` or `nobody`.
   Operator means permission level 2 or higher.

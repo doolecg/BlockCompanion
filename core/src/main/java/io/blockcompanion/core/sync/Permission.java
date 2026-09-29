@@ -5,7 +5,7 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * What a player may do in the shared space. On Paper/Spigot/Bukkit each is a permission node ({@link #node()}); on
+ * What a player may do in the shared space. On Paper each is a permission node ({@link #node()}); on
  * Fabric and NeoForge dedicated servers the server config says, per permission, whether everyone or only operators have
  * it ({@link SyncConfig}).
  */
