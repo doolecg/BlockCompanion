@@ -38,7 +38,9 @@ public final class GuideScreen extends Screen {
                     "With BlockDesigner open, From BlockDesigner loads the project you are working on.")),
             new Page("Move it into place", List.of(
                     "Hold the {tool}: it is the selection tool. Look at the schematic's box and it turns yellow.",
-                    "{move}+scroll moves it one block along the face you look at, {rotate}+scroll turns it and {mirror} mirrors it.",
+                    "{move}+scroll moves it one block towards the side of the box you look at: scroll up pushes it away, down pulls "
+                            + "it closer. Standing inside it, it moves the way you look, which is the easy way to lift or lower it.",
+                    "{rotate}+scroll turns it and {mirror} mirrors it.",
                     "When it sits right, press {lock} to lock it so nothing knocks it out of place. Ctrl+Z undoes a move.")),
             new Page("Read the ghosts", List.of(
                     "Ghosts are the blocks still to place. A block that is right shows nothing.",
@@ -97,8 +99,16 @@ public final class GuideScreen extends Screen {
 
         int by = panelY + panelH + Ui.PAD, bw = (panelW - 2 * Ui.GAP) / 3;
         boolean last = page == PAGES.size() - 1;
-        Button back = addRenderableWidget(Ui.button("Back", null, panelX, by, bw, b -> go(page - 1)));
-        back.active = page > 0;
+        if (page == 0) {
+            // The first page offers the tour in place of Back.
+            Button tour = addRenderableWidget(Button.builder(Component.literal("Show me in the world").withColor(Ui.ACCENT),
+                    b -> minecraft.gui.setScreen(new TourScreen())).bounds(panelX, by, bw, Ui.BUTTON_H)
+                    .tooltip(net.minecraft.client.gui.components.Tooltip.create(Component.literal(
+                            "A short tour with a demo schematic in front of you. Nothing in the world changes."))).build());
+            tour.active = minecraft.level != null && minecraft.player != null;
+        } else {
+            addRenderableWidget(Ui.button("Back", null, panelX, by, bw, b -> go(page - 1)));
+        }
         addRenderableWidget(Ui.button(last ? "Close" : "Skip guide", last ? null : "Close the guide. It is in the settings any time.",
                 panelX + bw + Ui.GAP, by, bw, b -> onClose()));
         addRenderableWidget(Button.builder(Component.literal(last ? "Done" : "Next").withColor(Ui.ACCENT), b -> {
@@ -153,7 +163,7 @@ public final class GuideScreen extends Screen {
     }
 
     /** The paragraph with its {tokens} filled in and coloured. */
-    private static Component styled(String text) {
+    public static Component styled(String text) {
         MutableComponent out = Component.empty();
         int i = 0;
         while (i < text.length()) {
@@ -183,9 +193,18 @@ public final class GuideScreen extends Screen {
             case "rotate" -> c.rotateModifier.label();
             case "corner" -> c.cornerModifier.label();
             case "link" -> c.linkModifier.label();
+            // The game's own mouse actions, as "right-click" and so on while they are on their usual buttons.
+            case "use" -> click(net.minecraft.client.Minecraft.getInstance().options.keyUse, "right-click");
+            case "attack" -> click(net.minecraft.client.Minecraft.getInstance().options.keyAttack, "left-click");
+            case "pick" -> click(net.minecraft.client.Minecraft.getInstance().options.keyPickItem, "middle-click");
             default -> key(name).getTranslatedKeyMessage().getString();
         };
         return Component.literal(s).withColor(Ui.ACCENT);
+    }
+
+    /** "right-click" (say) while the key is on its usual mouse button, else "press" and the key it was moved to. */
+    private static String click(KeyMapping key, String usual) {
+        return key.isDefault() ? usual : "press " + key.getTranslatedKeyMessage().getString();
     }
 
     private static KeyMapping key(String name) {

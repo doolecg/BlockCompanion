@@ -23,3 +23,6 @@ curseforge-pack/
 
 # Architectury transformer logs
 .architectury-transformer/
+
+# Promo screenshot script (local only)
+mc-26.3/common/src/main/java/io/blockcompanion/client/PromoShots.java

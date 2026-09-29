@@ -352,7 +352,7 @@ public final class SettingsScreen extends Screen {
             case EFFECTS -> {
                 l.header("While building");
                 l.option("Sparkles", "A few particles when a ghost is filled correctly.", Ui.toggle(c.particles, v -> c.particles = v, null));
-                l.option("Sounds", "Soft chimes for correct blocks, a low note for wrong ones. They follow the Blocks volume.",
+                l.option("Sounds", "A low note when you place a wrong block. It follows the Blocks volume.",
                         Ui.toggle(c.sounds, v -> c.sounds = v, null));
                 l.header("Milestones");
                 l.option("Layer done", "A toast and sparkles when a layer is finished.",

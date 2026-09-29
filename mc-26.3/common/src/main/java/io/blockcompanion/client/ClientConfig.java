@@ -138,7 +138,7 @@ public final class ClientConfig {
 
     /** A few particles when a ghost is filled correctly (and at celebrations). */
     public boolean particles = true;
-    /** Soft sounds for correct and wrong placements and celebrations (they follow the Blocks volume slider). */
+    /** A low note for wrong placements (it follows the Blocks volume slider); the tutorial also cheers what goes right. */
     public boolean sounds = true;
     /** Toast and sparkles when a level is finished. */
     public boolean layerCelebration = true;

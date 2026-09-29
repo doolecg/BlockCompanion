@@ -1,3 +1,30 @@
+# BlockCompanion 0.4.3
+
+A hands-on tutorial: its own world, opened from the title screen, where you learn BlockCompanion by doing each thing
+once. Building is quieter too. For Minecraft 1.21.1, 26.2 and 26.3 on Fabric and NeoForge, and the Paper plugin.
+
+## New
+- **Tutorial world:** the title screen's **BlockCompanion tutorial** button (under Minecraft Realms) opens a world made
+  for it. Each step asks you to do one thing, says "Good! You did it" when you have, and takes you on to the next area.
+  - **Chapter 1, the basics:** open the menu, hold the stick, move a floating hut onto its floor (from outside, or from
+    inside, where it moves the way you look), lock it, fix a red (wrong) block, break an orange (in the way) block,
+    build a porch with easy place, step through layers and open the resource list.
+  - **Chapter 2, your own schematics:** load one from the menu, turn it, mirror it, lock it in place, pick a ghost's
+    block with the middle mouse button, link a chest, AutoBuild from it, share it on the server, and the live link to
+    BlockDesigner: one friend designs in the app while another builds in the game.
+  - Every step stays up at least 20 seconds, with a bar counting down to the next one. **Enter** goes on, **Backspace**
+    goes back. The game mode follows the lesson (adventure, survival, creative), and chat and other panels stay out of
+    the way. Key names are the ones you have bound.
+- **Show me in the world:** the guide's first page has a short camera tour with a demo schematic in front of you, in any
+  world. Nothing in the world changes.
+- **Guide in the menu:** a **Guide** button next to **Settings** in the BlockCompanion menu.
+
+## Changed
+- **Quieter building:** only a wrong block makes a sound now (a low note). Finishing a layer or a whole schematic still
+  shows its toast, sparkles and fireworks, without the chimes. The tutorial keeps its chimes.
+
+---
+
 # BlockCompanion 0.4.2
 
 A short guide walks new players through the mod, and many wrong or in-the-way blocks no longer drag the frame rate

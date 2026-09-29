@@ -216,10 +216,15 @@ public final class LibraryScreen extends Screen {
             case LINK -> initLink();
         }
 
-        // The footer: settings on the left, back / next / done on the right.
+        // The footer: settings and the guide on the left, back / next / done on the right.
         int by = height - 25, bw = Math.min(80, (width - 2 * Ui.PAD - 3 * Ui.GAP) / 4);
         addRenderableWidget(Ui.button("Settings", "Every BlockCompanion option.", Ui.PAD, by, bw,
                 b -> minecraft.setScreen(new SettingsScreen(this))));
+        int gw = Math.min(60, bw);
+        if (Ui.PAD + bw + Ui.GAP + gw < width - Ui.PAD - 3 * bw - 2 * Ui.GAP - Ui.GAP) {
+            addRenderableWidget(Ui.button("Guide", "A short walk through BlockCompanion, a page at a time.", Ui.PAD + bw + Ui.GAP, by, gw,
+                    b -> minecraft.setScreen(new GuideScreen(this))));
+        }
         int rx = width - Ui.PAD - 3 * bw - 2 * Ui.GAP;
         Button back = addRenderableWidget(Ui.button("< Back", null, rx, by, bw, b -> go(steps[step.ordinal() - 1])));
         back.active = step.ordinal() > 0;

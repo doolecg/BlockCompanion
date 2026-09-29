@@ -72,7 +72,10 @@ public final class Effects {
         int y = box.minY() + levelIndex;
         toast(LAYER_TOAST, Component.literal("Layer " + (levelIndex + 1) + " done"), Component.literal("Y " + y + " is all correct"));
         Player player = Minecraft.getInstance().player;
-        if (player != null) play(level, SoundEvents.PLAYER_LEVELUP, player.getX(), player.getY(), player.getZ(), 0.3f, 1.4f);
+        // Building is quiet about what goes right (only wrong blocks make a sound); the tutorial cheers each layer on.
+        if (player != null && io.blockcompanion.client.Tutorial.active()) {
+            play(level, SoundEvents.PLAYER_LEVELUP, player.getX(), player.getY(), player.getZ(), 0.3f, 1.4f);
+        }
         if (!config().particles) return;
         // Sparkles along the level's outline, spread evenly, at most ~96.
         int perimeter = 2 * (box.sizeX() + box.sizeZ());
@@ -111,7 +114,9 @@ public final class Effects {
             mc.player.sendSystemMessage(Component.literal("Schematic finished! ").withStyle(ChatFormatting.GOLD)
                     .append(Component.literal(String.format(Locale.ROOT, "%,d blocks in the build, %,d placed with BlockCompanion watching, building time %s, accuracy %s",
                             total, stats.placed, time, accuracy)).withStyle(ChatFormatting.WHITE)));
-            play(level, SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, mc.player.getX(), mc.player.getY(), mc.player.getZ(), 0.5f, 1f);
+            if (io.blockcompanion.client.Tutorial.active()) {
+                play(level, SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, mc.player.getX(), mc.player.getY(), mc.player.getZ(), 0.5f, 1f);
+            }
         }
         if (!config().particles) return;
         double cx = (box.minX() + box.maxX() + 1) / 2.0, top = box.maxY() + 2.5, cz = (box.minZ() + box.maxZ() + 1) / 2.0;
@@ -144,6 +149,7 @@ public final class Effects {
         for (int i = 0; i < 20; i++) {
             spawn(level, ParticleTypes.TOTEM_OF_UNDYING, x, y, z, random.nextGaussian() * 0.3, random.nextDouble() * 0.4, random.nextGaussian() * 0.3);
         }
+        if (!io.blockcompanion.client.Tutorial.active()) return;
         play(level, SoundEvents.FIREWORK_ROCKET_LARGE_BLAST, x, y, z, 0.6f, 1f);
         play(level, SoundEvents.FIREWORK_ROCKET_TWINKLE, x, y, z, 0.4f, 1f);
     }

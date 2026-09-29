@@ -28,6 +28,8 @@ public final class LoadedPlacement {
     public boolean visible = true;
     /** Reloads when BlockDesigner sends a new version of its project. */
     public boolean live;
+    /** The tour's demo: never saved with the world or written to BlockDesigner's progress file. */
+    public boolean demo;
     final BuildProgress progress = new BuildProgress();
     final GhostRenderer ghosts = new GhostRenderer();
     /** The material helper's marks for this placement. */

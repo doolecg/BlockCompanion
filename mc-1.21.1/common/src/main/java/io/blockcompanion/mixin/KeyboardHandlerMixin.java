@@ -19,6 +19,11 @@ abstract class KeyboardHandlerMixin {
     @Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
     private void blockcompanion$onKey(long window, int key, int scancode, int action, int modifiers, CallbackInfo ci) {
         if (action == GLFW.GLFW_RELEASE || window != Minecraft.getInstance().getWindow().getWindow()) return;
+        // Enter skips a step of the tutorial.
+        if (action == GLFW.GLFW_PRESS && io.blockcompanion.client.Tutorial.onKey(key)) {
+            ci.cancel();
+            return;
+        }
         // Cmd on macOS, like the game's own Ctrl shortcuts.
         boolean control = (modifiers & (Minecraft.ON_OSX ? GLFW.GLFW_MOD_SUPER : GLFW.GLFW_MOD_CONTROL)) != 0;
         boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;

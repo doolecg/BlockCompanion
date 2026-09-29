@@ -74,8 +74,10 @@ public final class Hud {
         if (mc.options.hideGui || mc.player == null || mc.screen instanceof io.blockcompanion.client.screen.HudEditorScreen) return;
         ClientConfig config = BlockCompanionClient.config();
         HudLayout layout = config.hud;
+        // During the tutorial only its own panel and the crosshair hint show.
+        boolean tutorial = io.blockcompanion.client.Tutorial.active();
         // The tool panel doesn't need a schematic: the selection tool works without one.
-        if (BlockCompanionClient.toolPanelShown() && SelectionTool.holding(mc.player)) {
+        if (!tutorial && BlockCompanionClient.toolPanelShown() && SelectionTool.holding(mc.player)) {
             drawPanel(g, mc.font, layout.get(HudLayout.Element.TOOL), toolRows(config));
         }
         LoadedPlacement lp = BlockCompanionClient.focus();
@@ -84,7 +86,7 @@ public final class Hud {
             if (!shown.isEmpty()) lp = shown.get(shown.size() - 1);
         }
         if (lp == null) return;
-        if (config.progressHud && layout.get(HudLayout.Element.PANEL).enabled()) drawPanel(g, mc.font, layout.get(HudLayout.Element.PANEL), rows(mc, lp));
+        if (!tutorial && config.progressHud && layout.get(HudLayout.Element.PANEL).enabled()) drawPanel(g, mc.font, layout.get(HudLayout.Element.PANEL), rows(mc, lp));
         if (config.crosshairHint && layout.get(HudLayout.Element.HINT).enabled()) {
             Hint h = hint(mc, easy);
             if (h != null) drawHint(g, mc.font, layout.get(HudLayout.Element.HINT), h.text, h.color);

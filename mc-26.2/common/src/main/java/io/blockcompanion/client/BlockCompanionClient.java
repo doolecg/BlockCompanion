@@ -293,9 +293,11 @@ public final class BlockCompanionClient {
         if (mc.level != lastLevel) onLevelChanged(mc);
         ClientLink.tick();
         Updates.tick(mc);
+        if (TutorialSelfTest.ENABLED) TutorialSelfTest.tick(mc);
         if (mc.level == null || mc.player == null) return;
 
         welcome(mc);
+        Tutorial.tick(mc);
         while (Keys.LIBRARY.consumeClick()) mc.gui.setScreen(new LibraryScreen(mc.gui.screen()));
         while (Keys.RESOURCES.consumeClick()) {
             if (PLACEMENTS.isEmpty()) actionBar("No schematic loaded");
@@ -419,19 +421,19 @@ public final class BlockCompanionClient {
         for (LoadedPlacement lp : PLACEMENTS) {
             Path file = null;
             try {
-                file = library.resolve(lp.name());
+                if (!lp.demo) file = library.resolve(lp.name());
             } catch (IOException e) {
                 // Outside the library: no file to hash.
             }
-            lp.progress.sync(lp.placement, file, saved == null ? null : saved.progressFile(lp.slot), world);
+            lp.progress.sync(lp.placement, file, saved == null || lp.demo ? null : saved.progressFile(lp.slot), world);
             if (here(lp)) {
                 Box b = lp.placement.worldBox();
                 double dx = Math.max(0, Math.max(b.minX() - mc.player.getX(), mc.player.getX() - b.maxX() - 1));
                 double dy = Math.max(0, Math.max(b.minY() - mc.player.getY(), mc.player.getY() - b.maxY() - 1));
                 double dz = Math.max(0, Math.max(b.minZ() - mc.player.getZ(), mc.player.getZ() - b.maxZ() - 1));
-                lp.progress.tick(mc.level, true, dx * dx + dy * dy + dz * dz < 32 * 32, config.progressFile);
+                lp.progress.tick(mc.level, true, dx * dx + dy * dy + dz * dz < 32 * 32, config.progressFile && !lp.demo);
             } else {
-                lp.progress.tick(mc.level, false, false, config.progressFile);
+                lp.progress.tick(mc.level, false, false, config.progressFile && !lp.demo);
             }
         }
         EASY.tick(mc, shownHere());
@@ -567,6 +569,8 @@ public final class BlockCompanionClient {
 
     /** The game is closing: write the progress files, save the state, close the link. */
     public static void onClientStopping() {
+        // Closing the game inside the tutorial world: its schematic files are taken out of the library too.
+        Tutorial.reset();
         saveNow();
         for (LoadedPlacement lp : PLACEMENTS) lp.progress.close();
         ChestTracker.get().save();
@@ -665,6 +669,7 @@ public final class BlockCompanionClient {
 
     private static void onLevelChanged(Minecraft mc) {
         lastLevel = mc.level;
+        Tutorial.reset();
         SELECTION.clear();
         SELECTION_RENDER.clear();
         OWN.clear();
@@ -715,6 +720,17 @@ public final class BlockCompanionClient {
         changed(lp);
         actionBar("Loaded " + lp.shortName() + " (" + s.blockCount() + " blocks)" + (PLACEMENTS.size() > 1 ? ", " + PLACEMENTS.size() + " loaded" : ""));
         return true;
+    }
+
+    /** Loads the tour's demo schematic where it is, and selects it; it is never saved (see {@link LoadedPlacement#demo}). */
+    public static LoadedPlacement load(Placement p) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return null;
+        LoadedPlacement lp = add(p, dimensionId(mc.level));
+        lp.demo = true;
+        lp.layers.set(-1, Layers.Mode.BUILD_UP);
+        changed(lp, false);
+        return lp;
     }
 
     private static Structure read(String name) {
@@ -878,7 +894,7 @@ public final class BlockCompanionClient {
 
     private static void saveSlot(LoadedPlacement lp) {
         lp.dirty = false;
-        if (saved == null) return;
+        if (saved == null || lp.demo) return;
         try {
             saved.write(lp.slot, lp.saved());
         } catch (IOException e) {
@@ -1354,6 +1370,7 @@ public final class BlockCompanionClient {
     /** The HUD: the info panel and the crosshair hint, where the HUD editor put them. */
     public static void onRenderHud(GuiGraphicsExtractor g) {
         Hud.render(g, EASY);
+        Tutorial.render(g);
     }
 
     public static void actionBar(String message) {

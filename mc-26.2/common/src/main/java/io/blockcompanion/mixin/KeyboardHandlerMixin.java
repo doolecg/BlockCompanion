@@ -19,6 +19,11 @@ abstract class KeyboardHandlerMixin {
     @Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
     private void blockcompanion$onKey(long window, int action, KeyEvent event, CallbackInfo ci) {
         if (action == 0 || Keys.UNDO == null) return;
+        // Enter skips a step of the tutorial.
+        if (action == 1 && io.blockcompanion.client.Tutorial.onKey(event.key())) {
+            ci.cancel();
+            return;
+        }
         if (BlockCompanionClient.onUndoKey(Keys.UNDO.matches(event), Keys.REDO.matches(event), event.hasControlDownWithQuirk(), event.hasShiftDown())) {
             ci.cancel();
         }

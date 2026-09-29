@@ -302,7 +302,8 @@ public final class BuildProgress {
 
     /** Writes the shared progress file now if anything changed (unload, quit). */
     public void flushFile() {
-        if (tracker == null || fileWriter == null || !BlockCompanionClient.config().progressFile) return;
+        // A demo (the tutorial's) has no library file, so nothing for BlockDesigner to match the progress file to.
+        if (tracker == null || fileWriter == null || libraryFile == null || !BlockCompanionClient.config().progressFile) return;
         fileWriter.flush(System.currentTimeMillis(), this::snapshot);
     }
 
