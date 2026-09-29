@@ -368,6 +368,33 @@ public final class BlockCompanionClient {
             else if (!config.easyPlace) actionBar("Auto place on, but easy place is off (" + keyName("easy_place") + ")");
             else actionBar("Auto place on: missing blocks in reach place themselves");
         }
+        while (Keys.TOGGLE_HUD.consumeClick()) {
+            // Any HUD piece showing: hide all of them; none showing: show all of them.
+            boolean show = !(config.progressHud || config.crosshairHint || config.toolHud);
+            config.progressHud = config.crosshairHint = config.toolHud = show;
+            config.save(configFile);
+            actionBar(show ? "HUD shown" : "HUD hidden");
+        }
+        while (Keys.TOGGLE_SHIMMER.consumeClick()) {
+            config.ghostShimmer = !config.ghostShimmer;
+            config.save(configFile);
+            actionBar(config.ghostShimmer ? "Ghost shimmer on" : "Ghost shimmer off");
+        }
+        while (Keys.TOGGLE_GHOST_ENTITIES.consumeClick()) {
+            config.ghostBlockEntities = !config.ghostBlockEntities;
+            config.save(configFile);
+            actionBar(config.ghostBlockEntities ? "Block entity ghosts on" : "Block entity ghosts off");
+        }
+        while (Keys.TOGGLE_BOXES.consumeClick()) {
+            config.boxesAlways = !config.boxesAlways;
+            config.save(configFile);
+            actionBar(config.boxesAlways ? "Boxes always shown" : "Boxes shown with the tool");
+        }
+        while (Keys.TOGGLE_MATERIAL_HELPER.consumeClick()) {
+            config.materialHelper = !config.materialHelper;
+            config.save(configFile);
+            actionBar(config.materialHelper ? "Material helper on" : "Material helper off");
+        }
         while (Keys.LAYER_MODE.consumeClick()) {
             LoadedPlacement f = focus();
             if (f == null || refuse(f, PlacementLock.LAYERS)) continue;

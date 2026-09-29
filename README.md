@@ -170,6 +170,8 @@ release has one jar per loader and Minecraft version:
   stick needed. A new change clears what could be redone; a quick scroll counts as one step. Undo won't move a locked
   placement, and on a server a shared placement's undo is sent like any other move.
 - **M** mirrors it (stick in hand). Stairs, doors, rails, fences, signs and other directional blocks turn and mirror with it.
+- **Toggle keys** (none bound until you set one): show or hide the HUD, ghost shimmer, block entity ghosts, boxes
+  always or only with the tool, and the material helper. Each flips the same option as the settings screen and saves it.
 - Every key can be rebound in **Options › Controls › BlockCompanion** or on the settings screen's Keys tab. The stick's
   modifiers (Alt, Ctrl, Shift or off: for moving, turning, corners, clearing and linking) are on the Building tab, with
   the reach (see [Settings](#settings)).

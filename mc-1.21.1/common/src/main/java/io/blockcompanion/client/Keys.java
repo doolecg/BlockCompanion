@@ -43,9 +43,16 @@ public final class Keys {
     public static final KeyMapping GRAB = key("grab", InputConstants.UNKNOWN.getValue());
     /** Opens the settings screen. */
     public static final KeyMapping SETTINGS = key("settings", InputConstants.UNKNOWN.getValue());
+    /** Rendering and HUD toggles: they flip the same options as the settings screen. No keys by default. */
+    public static final KeyMapping TOGGLE_HUD = key("toggle_hud", InputConstants.UNKNOWN.getValue());
+    public static final KeyMapping TOGGLE_SHIMMER = key("toggle_shimmer", InputConstants.UNKNOWN.getValue());
+    public static final KeyMapping TOGGLE_GHOST_ENTITIES = key("toggle_ghost_entities", InputConstants.UNKNOWN.getValue());
+    public static final KeyMapping TOGGLE_BOXES = key("toggle_boxes", InputConstants.UNKNOWN.getValue());
+    public static final KeyMapping TOGGLE_MATERIAL_HELPER = key("toggle_material_helper", InputConstants.UNKNOWN.getValue());
 
     public static final List<KeyMapping> ALL = List.of(LIBRARY, RESOURCES, MIRROR, LAYER_UP, LAYER_DOWN, LAYER_MODE, TOGGLE_VISIBLE, VIEW,
-            SELECT_CORNER, SAVE, EASY_PLACE, EASY_PLACE_AUTO, LOCK, NEXT_PLACEMENT, GRAB, SETTINGS, UNDO, REDO);
+            SELECT_CORNER, SAVE, EASY_PLACE, EASY_PLACE_AUTO, LOCK, NEXT_PLACEMENT, GRAB, SETTINGS, UNDO, REDO,
+            TOGGLE_HUD, TOGGLE_SHIMMER, TOGGLE_GHOST_ENTITIES, TOGGLE_BOXES, TOGGLE_MATERIAL_HELPER);
 
     private Keys() {
     }

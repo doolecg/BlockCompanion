@@ -1,3 +1,19 @@
+# BlockCompanion 0.4.4
+
+Keys for switching the HUD and ghost effects on and off without opening the settings. For Minecraft 1.21.1, 26.2 and
+26.3 on Fabric and NeoForge, and the Paper plugin.
+
+## New
+- **Toggle keys:** show or hide the HUD (progress panel, crosshair hint and tool panel together), ghost shimmer on or
+  off, block entity ghosts on or off, boxes always shown or only with the tool, and the material helper on or off. None
+  has a key until you set one in **Options › Controls › BlockCompanion** or on the settings screen's Keys tab. Each
+  one says what it did above the hotbar and is remembered like the setting it flips.
+
+## Changed
+- **Server plugin:** listed for Paper 1.21.1 only, the server it is tested on.
+
+---
+
 # BlockCompanion 0.4.3
 
 A hands-on tutorial: its own world, opened from the title screen, where you learn BlockCompanion by doing each thing
