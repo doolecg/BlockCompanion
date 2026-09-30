@@ -17,9 +17,7 @@ public final class BlockCompanionFabricClient implements ClientModInitializer {
     public void onInitializeClient() {
         Keys.create(KeyMapping.Category::register).forEach(KeyMappingHelper::registerKeyMapping);
         var mod = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("blockcompanion");
-        BlockCompanionClient.setPlatform("fabric", mod.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?"),
-                mod.filter(c -> c.getOrigin().getKind() == net.fabricmc.loader.api.metadata.ModOrigin.Kind.PATH)
-                        .map(c -> c.getOrigin().getPaths().getFirst()).orElse(null));
+        BlockCompanionClient.setPlatform("fabric", mod.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?"));
         BlockCompanionClient.init();
         ClientTickEvents.END_CLIENT_TICK.register(BlockCompanionClient::onClientTick);
         ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> BlockCompanionClient.onClientStopping());

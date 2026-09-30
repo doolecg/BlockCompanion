@@ -157,10 +157,6 @@ public final class ClientConfig {
     /** Ghost, mark, box and outline colours, set on the settings screen's Colours tab. */
     public final Palette colors = new Palette();
 
-    /** Look for a newer release on GitHub when the game starts. */
-    public boolean updateCheck = true;
-    /** Download a found update straight away; it installs when the game quits. */
-    public boolean updateAutoDownload = false;
     /** The settings screen tab last open. */
     public String settingsTab = "";
     /** The guide has opened once (it opens by itself the first time you are in a world). */
@@ -241,8 +237,6 @@ public final class ClientConfig {
         c.link = bool(p, "link.enabled", true);
         c.countChests = bool(p, "chests.count", true);
         c.colors.read(p);
-        c.updateCheck = bool(p, "updates.check", true);
-        c.updateAutoDownload = bool(p, "updates.autoDownload", false);
         c.settingsTab = p.getProperty("settings.tab", "").trim();
         c.guideSeen = bool(p, "guide.seen", false);
         c.save(file);
@@ -311,8 +305,6 @@ public final class ClientConfig {
         p.setProperty("link.enabled", Boolean.toString(link));
         p.setProperty("chests.count", Boolean.toString(countChests));
         colors.write(p);
-        p.setProperty("updates.check", Boolean.toString(updateCheck));
-        p.setProperty("updates.autoDownload", Boolean.toString(updateAutoDownload));
         p.setProperty("settings.tab", settingsTab);
         p.setProperty("guide.seen", Boolean.toString(guideSeen));
         try {

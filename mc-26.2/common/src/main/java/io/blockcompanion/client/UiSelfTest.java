@@ -32,8 +32,7 @@ public final class UiSelfTest {
             new Shot("settings-building", () -> new SettingsScreen(null, SettingsScreen.Tab.BUILDING)),
             new Shot("settings-colours", () -> new SettingsScreen(null, SettingsScreen.Tab.COLORS)),
             new Shot("settings-keys", () -> new SettingsScreen(null, SettingsScreen.Tab.KEYS)),
-            new Shot("settings-blockdesigner", () -> new SettingsScreen(null, SettingsScreen.Tab.LINK)),
-            new Shot("settings-updates", () -> new SettingsScreen(null, SettingsScreen.Tab.UPDATES))),
+            new Shot("settings-blockdesigner", () -> new SettingsScreen(null, SettingsScreen.Tab.LINK))),
             java.util.stream.IntStream.range(0, GuideScreen.pages()).mapToObj(i -> new Shot("guide-" + (i + 1), () -> new GuideScreen(null, i)))).toList();
 
     private static int ticks, index = -1, tourAt;

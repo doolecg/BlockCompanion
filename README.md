@@ -53,9 +53,8 @@ release has one jar per loader and Minecraft version:
 3. Put your BlockDesigner projects (`.bdproj`) and schematics in `<game folder>/blockcompanion/schematics` (the folder
    is made the first time you start the game, and the load screen has an **Open folder** button).
 
-- **Updates:** BlockCompanion checks this repository for a newer release when the game starts,
-  says so in chat, and installs it from the settings screen's **Updates** tab when you quit the game. The check can be
-  switched off there.
+- **Updates:** manual. BlockCompanion never contacts the internet or downloads anything; get new versions from
+  CurseForge or this repository's GitHub releases.
 
 ## Features
 
@@ -268,7 +267,7 @@ this computer; the [link protocol](docs/link-protocol.md) describes how.
 
 The settings screen (its key, the schematic screen's **Settings** button, Mod Menu or NeoForge's mod list) lists its
 sections down the left: **Ghosts**, **Building**, **AutoBuild**, **HUD**, **Effects**, **Colours**, **Keys**,
-**BlockDesigner** and **Updates**. Each section is one scrolling column with an option per row: its name and a short description on the left,
+and **BlockDesigner**. Each section is one scrolling column with an option per row: its name and a short description on the left,
 its control on the right. A change applies at once and is saved, **Reset** puts a section back to its defaults, and the
 screen opens on the section you last used.
 
@@ -279,9 +278,8 @@ screen opens on the section you last used.
   material helper's marks, the chest and sign outline, the boxes (selected, looked at, locked) and the save selection.
   Click one for the colour editor (red, green and blue sliders, a hex field, quick swatches, before and after), or pick
   a preset: Default, Colour-blind safe (purple and blue instead of red and orange), Vivid or Soft.
-- **Updates:** BlockCompanion looks for a new release on GitHub when the game starts, says so once
-  in chat, and on the Updates tab downloads the jar for your loader and Minecraft version. It installs when you quit the
-  game. **Download automatically** skips the click; the check itself can be switched off.
+- **Updates:** manual. The mod never checks for or downloads updates; download the jar for your loader and Minecraft
+  version from CurseForge or the GitHub releases page.
 
 Everything is also in `config/blockcompanion.properties` (written with the defaults on first start):
 
@@ -305,7 +303,6 @@ Everything is also in `config/blockcompanion.properties` (written with the defau
 | `tool.corner.modifier`, `tool.clear.modifier`, `tool.link.modifier` | ALT, SHIFT, CTRL | held while clicking with the tool: corners (left 1, right 2), clearing the selection, linking a chest |
 | `boxes.show` | tool | `tool`: boxes only while the selection tool is held; `always` |
 | `color.ghost`, `color.wrong`, `color.extra`, `color.helper`, `color.blockEntity`, `color.box`, `color.boxHover`, `color.boxLocked`, `color.selection` | see the Colours tab | the colours, as `#RRGGBB` |
-| `updates.check`, `updates.autoDownload` | true, false | looking for updates, and downloading them without asking |
 | `easyPlace.autoPick` | true | easy place takes the block from the inventory when it isn't in hand |
 | `easyPlace.auto`, `easyPlace.autoRate` | false, 4 | auto place, and its most blocks a second (1 to 20) |
 | `hud.hint`, `hud.toolPanel` | true, true | the small hint left of the crosshair; the tool panel while the stick is in hand |

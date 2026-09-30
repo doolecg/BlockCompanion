@@ -4,9 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import io.blockcompanion.client.BlockCompanionClient;
 import io.blockcompanion.client.ClientConfig;
 import io.blockcompanion.client.Keys;
-import io.blockcompanion.client.Updates;
 import io.blockcompanion.core.hud.Palette;
-import io.blockcompanion.core.update.Updater;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -46,8 +44,7 @@ public final class SettingsScreen extends Screen {
         EFFECTS("Effects", "Sparkles, sounds and celebrations"),
         COLORS("Colours", "Ghost, mark and box colours"),
         KEYS("Keys", "BlockCompanion's key bindings"),
-        LINK("BlockDesigner", "The live link to BlockDesigner"),
-        UPDATES("Updates", "New versions from GitHub");
+        LINK("BlockDesigner", "The live link to BlockDesigner");
 
         final String label, blurb;
 
@@ -243,10 +240,6 @@ public final class SettingsScreen extends Screen {
                 c.link = d.link;
                 c.progressFile = d.progressFile;
             }
-            case UPDATES -> {
-                c.updateCheck = d.updateCheck;
-                c.updateAutoDownload = d.updateAutoDownload;
-            }
         }
         changed();
         rebuildWidgets();
@@ -365,7 +358,6 @@ public final class SettingsScreen extends Screen {
             case COLORS -> addColors(l, c);
             case KEYS -> addKeys(l);
             case LINK -> LinkPanel.add(l);
-            case UPDATES -> addUpdates(l, c);
         }
     }
 
@@ -502,87 +494,6 @@ public final class SettingsScreen extends Screen {
             return true;
         }
         return super.mouseClicked(event, doubleClick);
-    }
-
-    // ---- updates ----------------------------------------------------------------------------------------------------
-
-    private void addUpdates(OptionList l, ClientConfig c) {
-        Updater u = Updates.get();
-        l.header("Updates");
-        l.option("Check for updates", "Looks for a new release on GitHub when the game starts.",
-                Ui.toggle(c.updateCheck, v -> {
-                    c.updateCheck = v;
-                    if (v) Updates.check();
-                }, null));
-        l.option("Download automatically", "Downloads a new version as soon as it is found. It installs when you quit the game.",
-                Ui.toggle(c.updateAutoDownload, v -> {
-                    c.updateAutoDownload = v;
-                    if (v && u != null && u.state() == Updater.State.AVAILABLE) Updates.download();
-                }, null));
-        l.header("This version");
-        Button action = Ui.button("", null, b -> updateAction());
-        l.status(() -> Component.literal("BlockCompanion " + (u == null ? "?" : u.currentVersion())), SettingsScreen::updateMessage,
-                SettingsScreen::updateColor, action);
-        Runnable update = () -> refreshAction(action);
-        update.run();
-        l.onTick(update);
-        l.option("Check again", "Asks GitHub for the latest release now.", Ui.button("Check now", null, b -> Updates.check()));
-        l.option("What's new", "Opens the release on GitHub.", Ui.button("Release page", null, b -> Updater.openInBrowser(
-                u != null && u.latest() != null && !u.latest().page().isEmpty() ? u.latest().page() : Updates.RELEASES)));
-    }
-
-    private static String updateMessage() {
-        Updater u = Updates.get();
-        if (u == null || u.message().isEmpty()) return "Not checked yet.";
-        return u.message();
-    }
-
-    private static int updateColor() {
-        Updater u = Updates.get();
-        if (u == null) return Ui.DIM;
-        return switch (u.state()) {
-            case UP_TO_DATE, READY -> Ui.GOOD;
-            case AVAILABLE -> Ui.ACCENT;
-            case FAILED -> Ui.BAD;
-            case CHECKING, DOWNLOADING -> Ui.WARN;
-            default -> Ui.DIM;
-        };
-    }
-
-    private void updateAction() {
-        Updater u = Updates.get();
-        if (u == null || u.state() != Updater.State.AVAILABLE) return;
-        if (u.canInstall()) Updates.download();
-        else Updater.openInBrowser(u.latest() != null && !u.latest().page().isEmpty() ? u.latest().page() : Updates.RELEASES);
-    }
-
-    /** Keeps the update button in step with a running check or download. */
-    private static void refreshAction(Button b) {
-        Updater u = Updates.get();
-        if (u == null) {
-            b.setMessage(Component.literal("Unavailable"));
-            b.active = false;
-            return;
-        }
-        String label;
-        boolean active = false;
-        switch (u.state()) {
-            case AVAILABLE -> {
-                label = u.canInstall() ? "Install" : "Get it";
-                active = true;
-            }
-            case DOWNLOADING -> label = Math.round(u.progress() * 100) + "%";
-            case READY -> label = "On quit";
-            case CHECKING -> label = "Checking...";
-            default -> label = "Up to date";
-        }
-        b.setMessage(Component.literal(label));
-        b.active = active;
-        b.setTooltip(Tooltip.create(Component.literal(switch (u.state()) {
-            case AVAILABLE -> u.canInstall() ? "Downloads the new version; it installs when you quit the game." : "Opens the release page.";
-            case READY -> "The new version installs when you quit the game.";
-            default -> "No update to install.";
-        })));
     }
 
     // ---- helpers ----------------------------------------------------------------------------------------------------

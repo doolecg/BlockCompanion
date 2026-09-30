@@ -75,7 +75,6 @@ public final class BlockCompanionClient {
     private static SchematicLibrary library;
     private static Path placementsDir;
     private static String loader = "?", modVersion = "?";
-    private static Path modJar;
     private static final Selection SELECTION = new Selection();
     private static final SelectionRenderer SELECTION_RENDER = new SelectionRenderer();
     private static final Effects EFFECTS = new Effects();
@@ -117,14 +116,10 @@ public final class BlockCompanionClient {
     private BlockCompanionClient() {
     }
 
-    /**
-     * The platform's name and the mod's version, for the link's instance file and update checks, and the mod's jar
-     * (null in a development run), which an update replaces; call before {@link #init()}.
-     */
-    public static void setPlatform(String loaderName, String version, Path jar) {
+    /** The platform's name and the mod's version, for the link's instance file; call before {@link #init()}. */
+    public static void setPlatform(String loaderName, String version) {
         loader = loaderName;
         modVersion = version;
-        modJar = jar;
     }
 
     /** Called once by the platform's client entry point. */
@@ -141,7 +136,6 @@ public final class BlockCompanionClient {
             LOG.warn("Could not create the schematic folder {}: {}", library.root(), e.toString());
         }
         if (config.link) ClientLink.start(library.root(), loader, modVersion);
-        Updates.init(loader, modVersion, modJar);
         LOG.info("BlockCompanion ready; schematics in {}", library.root());
     }
 
@@ -292,7 +286,6 @@ public final class BlockCompanionClient {
     public static void onClientTick(Minecraft mc) {
         if (mc.level != lastLevel) onLevelChanged(mc);
         ClientLink.tick();
-        Updates.tick(mc);
         if (TutorialSelfTest.ENABLED) TutorialSelfTest.tick(mc);
         if (mc.level == null || mc.player == null) return;
 

@@ -1,3 +1,17 @@
+# BlockCompanion 0.4.5
+
+No more automatic updates: the mod no longer connects to the internet by itself. For Minecraft 1.21.1, 26.2 and 26.3 on
+Fabric and NeoForge, and the Paper plugin.
+
+## Changed
+- **Manual updates only:** BlockCompanion no longer checks GitHub for new versions or downloads anything. Get new
+  versions from CurseForge or the GitHub releases page and replace the jar yourself.
+
+## Fixed
+- The settings screen's **Updates** tab and the two update options (`updates.check`, `updates.autoDownload`) are gone.
+
+---
+
 # BlockCompanion 0.4.4
 
 Keys for switching the HUD and ghost effects on and off without opening the settings. For Minecraft 1.21.1, 26.2 and

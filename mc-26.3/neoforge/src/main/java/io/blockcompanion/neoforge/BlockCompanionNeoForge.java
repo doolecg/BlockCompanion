@@ -23,8 +23,7 @@ import net.neoforged.neoforge.event.GameShuttingDownEvent;
 @Mod(value = BlockCompanion.MOD_ID, dist = Dist.CLIENT)
 public final class BlockCompanionNeoForge {
     public BlockCompanionNeoForge(IEventBus modBus, ModContainer container) {
-        BlockCompanionClient.setPlatform("neoforge", container.getModInfo().getVersion().toString(),
-                container.getModInfo().getOwningFile().getFile().getFilePath());
+        BlockCompanionClient.setPlatform("neoforge", container.getModInfo().getVersion().toString());
         container.registerExtensionPoint(IConfigScreenFactory.class, (mc, parent) -> new SettingsScreen(parent));
         modBus.addListener(RegisterKeyMappingsEvent.class, e -> {
             Keys.create(KeyMapping.Category::new);
