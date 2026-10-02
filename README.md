@@ -27,7 +27,7 @@ BlockDesigner opens. With BlockDesigner's BlockCompanion Plugin it links live: s
 into the game, see the game follow your edits, and see in the app what is built and what your chests hold.
 
 It is a client mod for **Fabric** and **NeoForge** on **Minecraft 1.21.1, 26.2 and 26.3**, plus a
-**Paper** plugin (Paper 1.21.1) for servers without mods. It is in early development; the [plan](docs/plan.md) lists
+**Paper / Spigot** plugin (1.21.1, 26.2 and 26.3; Bukkit API) for servers without mods. It is in early development; the [plan](docs/plan.md) lists
 what comes next.
 
 **Contents:** [Download](#download-and-install) · [Features](#features) · [Building from source](#building-from-source) · [Project layout](#project-layout)
@@ -45,7 +45,7 @@ release has one jar per loader and Minecraft version:
 | `blockcompanion-neoforge-26.2-<version>.jar` | NeoForge, Minecraft 26.2 |
 | `blockcompanion-fabric-26.3-<version>.jar` | Fabric, Minecraft 26.3 (needs Fabric API) |
 | `blockcompanion-neoforge-26.3-<version>.jar` | NeoForge, Minecraft 26.3 |
-| `blockcompanion-paper-<version>.jar` | Paper 1.21.1 servers (goes in `plugins`) |
+| `blockcompanion-paper-<version>.jar` | Paper and Spigot servers, 1.21.1, 26.2 and 26.3 (goes in `plugins`) |
 
 1. Download the jar for your loader and Minecraft version.
    Or let BlockDesigner do it: BlockCompanion Plugin's **Install mod…** puts the right jar into a game's `mods` folder.

@@ -1,3 +1,20 @@
+# BlockCompanion 0.4.6
+
+Lighter ghosts on big builds, and a way to limit how far from you the mod acts. For Minecraft 1.21.1, 26.2 and 26.3 on
+Fabric and NeoForge, and the Paper plugin.
+
+## New
+- **Interact range:** a new setting (off by default) that limits how far from you clicking, aiming, picking and
+  auto-place reach into a placement; ghosts still show out to the ghost distance. In 26.3 it also limits the material
+  helper. Find it on the settings screen (Ghosts tab in 1.21.1 and 26.3, Building tab in 26.2).
+
+## Changed
+- **Faster on big placements:** ghost sections far from you are freed from memory and rebuilt when you come back, so
+  large schematics cost less to keep loaded.
+- **Paper plugin:** listed for Paper and Spigot on 1.21.1, 26.2 and 26.3.
+
+---
+
 # BlockCompanion 0.4.5
 
 No more automatic updates: the mod no longer connects to the internet by itself. For Minecraft 1.21.1, 26.2 and 26.3 on

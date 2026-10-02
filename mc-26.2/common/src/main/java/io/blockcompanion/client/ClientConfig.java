@@ -85,6 +85,8 @@ public final class ClientConfig {
      * is drawn each frame, so a big schematic seen whole costs frames; progress is still followed everywhere.
      */
     public int ghostDistance = 64;
+    /** Easy place, auto place, picking and targeting only act on blocks this far from the player, in blocks; 0 means no limit. */
+    public int interactRange = 0;
 
     /** Right-click on a ghost with its item places exactly that block. Can be toggled with its key. */
     public boolean easyPlace = true;
@@ -203,6 +205,7 @@ public final class ClientConfig {
         c.ghostAlpha = version < 2 ? 0.85f : (float) parse(p.getProperty("ghost.alpha"), 0.85, 0.3, 1);
         c.ghostShimmer = bool(p, "ghost.shimmer", true);
         c.ghostDistance = (int) parse(p.getProperty("ghost.distance"), 64, 0, 512);
+        c.interactRange = (int) parse(p.getProperty("interact.range"), 0, 0, 512);
         c.ghostBlockEntities = bool(p, "ghost.blockEntities", true);
         c.easyPlace = bool(p, "easyPlace.enabled", true);
         c.easyPlaceAutoPick = bool(p, "easyPlace.autoPick", true);
@@ -274,6 +277,7 @@ public final class ClientConfig {
         p.setProperty("ghost.alpha", Float.toString(ghostAlpha));
         p.setProperty("ghost.shimmer", Boolean.toString(ghostShimmer));
         p.setProperty("ghost.distance", Integer.toString(ghostDistance));
+        p.setProperty("interact.range", Integer.toString(interactRange));
         p.setProperty("ghost.blockEntities", Boolean.toString(ghostBlockEntities));
         p.setProperty("easyPlace.enabled", Boolean.toString(easyPlace));
         p.setProperty("easyPlace.autoPick", Boolean.toString(easyPlaceAutoPick));

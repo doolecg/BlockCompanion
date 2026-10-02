@@ -164,7 +164,7 @@ public final class EasyPlace {
         if (player == null || level == null || placement == null) return null;
         Vec3 eye = player.getEyePosition(partialTick);
         Vec3 look = player.getViewVector(partialTick);
-        double reach = player.blockInteractionRange();
+        double reach = limited(player.blockInteractionRange());
         double realDist = Double.POSITIVE_INFINITY;
         if (mc.hitResult != null && mc.hitResult.getType() == HitResult.Type.BLOCK) realDist = mc.hitResult.getLocation().distanceTo(eye);
         Box box = placement.worldBox();
@@ -181,6 +181,12 @@ public final class EasyPlace {
         BlockState wantMc = StateMapper.toMc(want);
         if (wantMc == null) return null;
         return new Target(new BlockPos(h.x(), h.y(), h.z()), direction(h.face()), new Vec3(h.hx(), h.hy(), h.hz()), h.distance(), want, wantMc);
+    }
+
+    /** A reach cut down to the interact range setting, when it is set. */
+    private static double limited(double reach) {
+        int range = BlockCompanionClient.config().interactRange;
+        return range > 0 ? Math.min(reach, range) : reach;
     }
 
     /** A cell easy place can fill: missing, or a single slab that should be a double one. */
@@ -442,7 +448,7 @@ public final class EasyPlace {
         SyncClient sc = ClientSync.client();
         boolean server = sc != null && sc.serverPresent();
         int interval = AutoPlacePlanner.intervalTicks(config.easyPlaceAutoRate, server ? sc.features().autoPlaceRate() : 0);
-        double reach = AutoPlacePlanner.reach(player.blockInteractionRange(), server ? sc.features().autoPlaceRange() : 0);
+        double reach = limited(AutoPlacePlanner.reach(player.blockInteractionRange(), server ? sc.features().autoPlaceRange() : 0));
 
         // What the player carries: the off hand and the hotbar, and the rest of the inventory when easy place may take from it.
         Inventory inv = player.getInventory();

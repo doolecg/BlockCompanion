@@ -1,4 +1,4 @@
-// Bukkit-API plugin for Paper: the shared space (server sync, milestone 2) over plugin messaging on
+// Bukkit-API plugin for Paper and Spigot: the shared space (server sync, milestone 2) over plugin messaging on
 // blockcompanion:main, using the same core protocol as the mods.
 plugins {
     id 'java'
@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    // Only Bukkit API calls are used (only Paper is tested and claimed).
+    // Only Bukkit API calls are used (the one jar was tested on Paper and Spigot 1.21.1, 26.2 and 26.3).
     compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
     implementation project(':core')
 }

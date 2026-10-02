@@ -205,6 +205,7 @@ public final class SettingsScreen extends Screen {
                 c.materialHelper = d.materialHelper;
                 c.materialHelperCells = d.materialHelperCells;
                 c.reach = d.reach;
+                c.interactRange = d.interactRange;
                 c.toolItem = d.toolItem;
                 c.boxesAlways = d.boxesAlways;
                 c.toolRequired = d.toolRequired;
@@ -302,6 +303,8 @@ public final class SettingsScreen extends Screen {
                         Ui.toggle(c.toolRequired, v -> c.toolRequired = v, null));
                 l.option("Reach", "How far away looking at a box still counts.",
                         Ui.slider(16, 256, 8, c.reach, v -> (int) v + " blocks", v -> c.reach = v, null));
+                l.option("Interact range", "Easy place, auto place and picking only work on ghosts this close to you. Ghosts are still drawn out to the ghost distance.",
+                        Ui.slider(0, 256, 8, c.interactRange, v -> v < 1 ? "Unlimited" : Math.round(v) + " blocks", v -> c.interactRange = (int) Math.round(v), null));
                 l.option("Keys", "Every BlockCompanion key can be changed in the Keys section.", Ui.button("Keys...", null, b -> selectTab(Tab.KEYS)));
 
                 l.header("Selection tool and chests");

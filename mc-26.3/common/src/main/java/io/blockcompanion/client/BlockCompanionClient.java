@@ -403,6 +403,7 @@ public final class BlockCompanionClient {
         if (PLACE_SELF_TEST) PlaceSelfTest.tick(mc);
         if (ChestSelfTest.ENABLED) ChestSelfTest.tick(mc);
         if (UiSelfTest.ENABLED) UiSelfTest.tick(mc);
+        if (PromoShots.ENABLED) PromoShots.tick(mc);
         if (++ticksSinceChange >= 40) saveNow();
         checkOverlaps();
     }
@@ -499,7 +500,7 @@ public final class BlockCompanionClient {
             for (LoadedPlacement lp : PLACEMENTS) {
                 ProgressTracker t = lp.progress.tracker();
                 lp.helperCells = t == null || !shown.contains(lp) ? List.of()
-                        : t.nearestMissing(item, mc.player.getX(), mc.player.getEyeY(), mc.player.getZ(), 48, config.materialHelperCells,
+                        : t.nearestMissing(item, mc.player.getX(), mc.player.getEyeY(), mc.player.getZ(), config.withinInteractRange(48), config.materialHelperCells,
                         lp.layers::isVisible);
             }
         }

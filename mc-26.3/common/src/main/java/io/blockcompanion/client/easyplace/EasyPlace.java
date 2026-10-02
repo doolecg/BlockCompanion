@@ -164,7 +164,7 @@ public final class EasyPlace {
         if (player == null || level == null || placement == null) return null;
         Vec3 eye = player.getEyePosition(partialTick);
         Vec3 look = player.getViewVector(partialTick);
-        double reach = player.blockInteractionRange();
+        double reach = BlockCompanionClient.config().withinInteractRange(player.blockInteractionRange());
         double realDist = Double.POSITIVE_INFINITY;
         if (mc.hitResult != null && mc.hitResult.getType() == HitResult.Type.BLOCK) realDist = mc.hitResult.getLocation().distanceTo(eye);
         Box box = placement.worldBox();
@@ -444,7 +444,7 @@ public final class EasyPlace {
         SyncClient sc = ClientSync.client();
         boolean server = sc != null && sc.serverPresent();
         int interval = AutoPlacePlanner.intervalTicks(config.easyPlaceAutoRate, server ? sc.features().autoPlaceRate() : 0);
-        double reach = AutoPlacePlanner.reach(player.blockInteractionRange(), server ? sc.features().autoPlaceRange() : 0);
+        double reach = config.withinInteractRange(AutoPlacePlanner.reach(player.blockInteractionRange(), server ? sc.features().autoPlaceRange() : 0));
 
         // What the player carries: the off hand and the hotbar, and the rest of the inventory when easy place may take from it.
         Inventory inv = player.getInventory();

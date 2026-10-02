@@ -235,6 +235,7 @@ public final class GhostRenderer {
             return;
         }
         sync(p, layers);
+        freeFar(cam);
         rebuildSome(level, layers, cam);
         ClientConfig config = BlockCompanionClient.config();
 
@@ -306,6 +307,23 @@ public final class GhostRenderer {
     private static boolean tooFar(long key, Vec3 cam) {
         int d = BlockCompanionClient.config().ghostDistance;
         return d > 0 && sectionDist2(key, cam) > (d + 8.0) * (d + 8.0);
+    }
+
+    /**
+     * Drops the recorded geometry of sections well beyond the ghost distance and marks them stale, so they mesh again when
+     * the player comes back. Far from the {@link #tooFar} limit, so a player at the edge doesn't make them flicker.
+     */
+    private void freeFar(Vec3 cam) {
+        int d = BlockCompanionClient.config().ghostDistance;
+        if (d <= 0 || meshes.isEmpty()) return;
+        double limit = Math.max(d * 1.5, d + 16.0);
+        var it = meshes.entrySet().iterator();
+        while (it.hasNext()) {
+            long k = it.next().getKey();
+            if (sectionDist2(k, cam) <= limit * limit) continue;
+            it.remove();
+            dirty.add(k);
+        }
     }
 
     private static double sectionDist2(long key, Vec3 cam) {

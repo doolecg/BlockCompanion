@@ -235,6 +235,7 @@ public final class GhostRenderer {
             return;
         }
         sync(p, layers);
+        freeFar(cam);
         rebuildSome(level, layers, cam);
         ClientConfig config = BlockCompanionClient.config();
 
@@ -306,6 +307,13 @@ public final class GhostRenderer {
     private static boolean tooFar(long key, Vec3 cam) {
         int d = BlockCompanionClient.config().ghostDistance;
         return d > 0 && sectionDist2(key, cam) > (d + 8.0) * (d + 8.0);
+    }
+
+    /** Whether a section lies so far beyond the ghost distance that its recorded geometry is dropped (1.5 times the distance). */
+    private static boolean farAway(long key, Vec3 cam) {
+        int d = BlockCompanionClient.config().ghostDistance;
+        double limit = (d + 8.0) * 1.5;
+        return d > 0 && sectionDist2(key, cam) > limit * limit;
     }
 
     private static double sectionDist2(long key, Vec3 cam) {
@@ -433,6 +441,17 @@ public final class GhostRenderer {
                 BlockCompanionClient.LOG.warn("Could not build ghost section {}", io.blockcompanion.core.model.BlockPos.unpack(k), ex);
             }
             if (System.nanoTime() - start > BUILD_BUDGET_NANOS) break;
+        }
+    }
+
+    /** Drops the geometry of sections far out of range and marks them stale, so they mesh again when the player returns. */
+    private void freeFar(Vec3 cam) {
+        var it = meshes.entrySet().iterator();
+        while (it.hasNext()) {
+            long k = it.next().getKey();
+            if (!farAway(k, cam)) continue;
+            it.remove();
+            dirty.add(k);
         }
     }
 

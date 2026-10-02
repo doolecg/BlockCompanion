@@ -7,7 +7,7 @@ several placements at once, the new HUD and screens, linked chests and the live 
 See each milestone's checklist and [Round 2](#round-2-several-placements-hud-chests-and-the-live-link).
 
 BlockCompanion is an in-game companion to [BlockDesigner](https://github.com/doolecg/BlockDesigner): a Litematica-style
-schematic mod that is lighter and easier to use, for Fabric, NeoForge and Paper servers, on Minecraft
+schematic mod that is lighter and easier to use, for Fabric, NeoForge and Paper/Spigot servers, on Minecraft
 1.21.1 and 26.3.
 
 ## Architecture

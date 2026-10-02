@@ -259,6 +259,7 @@ public final class GhostRenderer {
             return;
         }
         sync(p, layers);
+        freeFar(cam);
         rebuildSome(level, layers, cam);
         ClientConfig config = BlockCompanionClient.config();
 
@@ -343,6 +344,19 @@ public final class GhostRenderer {
     private static boolean tooFar(long key, Vec3 cam) {
         int d = BlockCompanionClient.config().ghostDistance;
         return d > 0 && sectionDist2(key, cam) > (d + 8.0) * (d + 8.0);
+    }
+
+    /** Closes the meshes of sections well beyond the ghost distance; they are marked stale and rebuilt on the way back. */
+    private void freeFar(Vec3 cam) {
+        int d = BlockCompanionClient.config().ghostDistance;
+        if (d <= 0) return;
+        double limit = 1.5 * (d + 8.0);
+        meshes.entrySet().removeIf(e -> {
+            if (sectionDist2(e.getKey(), cam) <= limit * limit) return false;
+            e.getValue().close();
+            dirty.add(e.getKey());
+            return true;
+        });
     }
 
     private static double sectionDist2(long key, Vec3 cam) {

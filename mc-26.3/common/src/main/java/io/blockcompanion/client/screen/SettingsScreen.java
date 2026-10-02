@@ -194,6 +194,7 @@ public final class SettingsScreen extends Screen {
                 c.ghostAlpha = d.ghostAlpha;
                 c.ghostShimmer = d.ghostShimmer;
                 c.ghostDistance = d.ghostDistance;
+                c.interactRange = d.interactRange;
                 c.ghostBlockEntities = d.ghostBlockEntities;
             }
             case BUILDING -> {
@@ -258,6 +259,8 @@ public final class SettingsScreen extends Screen {
                         Ui.toggle(c.ghostShimmer, v -> c.ghostShimmer = v, null));
                 l.option("Ghost distance", "Ghosts further away than this aren't drawn, which keeps big schematics smooth. Progress is still counted everywhere.",
                         Ui.slider(0, 256, 16, c.ghostDistance, v -> v < 1 ? "Unlimited" : Math.round(v) + " blocks", v -> c.ghostDistance = (int) Math.round(v), null));
+                l.option("Interact range", "Comparing, auto place, easy place and the material helper only act on blocks this close to you. Ghosts are still drawn out to the ghost distance.",
+                        Ui.slider(0, 256, 16, c.interactRange, v -> v < 1 ? "Unlimited" : Math.round(v) + " blocks", v -> c.interactRange = (int) Math.round(v), null));
                 l.option("Real shapes", "Chests, signs, beds, banners and heads drawn with their real shapes.",
                         Ui.toggle(c.ghostBlockEntities, v -> c.ghostBlockEntities = v, null));
                 l.option("Ghost colours", "The tint, wrong and in-the-way colours are in the Colours section.",
